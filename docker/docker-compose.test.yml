@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  # Test PostgreSQL Database
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: dks-postgres-test
+    environment:
+      POSTGRES_DB: digital_key_system_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5433:5432"
+    volumes:
+      - ../database/postgres-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - dks-test-network
+    restart: "no"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d digital_key_system_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Test API Server
+  api-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: dks-api-test
+    environment:
+      NODE_ENV: test
+      DB_HOST: postgres-test
+      DB_PORT: 5432
+      DB_NAME: digital_key_system_test
+      DB_USER: test_user
+      DB_PASSWORD: test_password
+      DB_POOL_MAX: 5
+      DB_IDLE_TIMEOUT: 5000
+      DB_CONNECTION_TIMEOUT: 5000
+      JWT_SECRET: test-secret-key
+      PORT: 3000
+    ports:
+      - "3001:3000"
+    networks:
+      - dks-test-network
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http = require('http'); const req = http.request({host: 'localhost', port: 3000, path: '/health', timeout: 1000}, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.end();"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Test Runner
+  test-runner:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: dks-test-runner
+    environment:
+      NODE_ENV: test
+      DB_HOST: postgres-test
+      DB_PORT: 5432
+      DB_NAME: digital_key_system_test
+      DB_USER: test_user
+      DB_PASSWORD: test_password
+      JWT_SECRET: test-secret-key
+    volumes:
+      - ../server/tests:/app/tests:ro
+      - test_results:/app/test-results
+    networks:
+      - dks-test-network
+    depends_on:
+      api-test:
+        condition: service_healthy
+    restart: "no"
+    command: ["npm", "test"]
+
+networks:
+  dks-test-network:
+    driver: bridge
+
+volumes:
+  test_results:
+    driver: local

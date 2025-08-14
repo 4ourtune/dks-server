@@ -1,0 +1,142 @@
+version: '3.8'
+
+services:
+  # Staging PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: dks-postgres-staging
+    environment:
+      POSTGRES_DB: ${DB_NAME:-digital_key_system_staging}
+      POSTGRES_USER: ${DB_USER:-staging_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+      - ../database/postgres-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ../database/seed-data.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    networks:
+      - dks-staging-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-staging_user} -d ${DB_NAME:-digital_key_system_staging}"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # Staging API Server
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: dks-api-staging
+    environment:
+      NODE_ENV: staging
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-digital_key_system_staging}
+      DB_USER: ${DB_USER:-staging_user}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      DB_IDLE_TIMEOUT: ${DB_IDLE_TIMEOUT:-30000}
+      DB_CONNECTION_TIMEOUT: ${DB_CONNECTION_TIMEOUT:-10000}
+      JWT_SECRET: ${JWT_SECRET}
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+    ports:
+      - "3000:3000"
+    volumes:
+      - api_staging_logs:/app/logs
+    networks:
+      - dks-staging-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http = require('http'); const req = http.request({host: 'localhost', port: 3000, path: '/health', timeout: 2000}, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.end();"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # Staging Redis
+  redis:
+    image: redis:7-alpine
+    container_name: dks-redis-staging
+    volumes:
+      - redis_staging_data:/data
+    networks:
+      - dks-staging-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 20s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+    command: redis-server --appendonly yes --maxmemory 100mb --maxmemory-policy allkeys-lru
+
+  # pgAdmin for staging database management
+  pgadmin:
+    image: dpage/pgadmin4:7
+    container_name: dks-pgadmin-staging
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-staging@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: 'True'
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_staging_data:/var/lib/pgadmin
+    networks:
+      - dks-staging-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+
+networks:
+  dks-staging-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16
+
+volumes:
+  postgres_staging_data:
+    driver: local
+  redis_staging_data:
+    driver: local
+  api_staging_logs:
+    driver: local
+  pgadmin_staging_data:
+    driver: local
