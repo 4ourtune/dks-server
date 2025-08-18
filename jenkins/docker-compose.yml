@@ -11,12 +11,14 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
+      - JENKINS_OPTS="--httpPort=8080"
+      - JAVA_OPTS="-Djava.awt.headless=true -Xmx512m"
     command: |
       bash -c "
         apt-get update
         curl -fsSL https://get.docker.com -o get-docker.sh
         sh get-docker.sh --dry-run
-        apt-get install -y docker-ce-cli
+        apt-get install -y docker-ce-cli google-cloud-sdk
         usermod -aG docker jenkins
         /usr/local/bin/jenkins.sh
       "
