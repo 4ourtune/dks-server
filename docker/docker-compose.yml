@@ -63,7 +63,7 @@ services:
       - "3000:3000"
     volumes:
       - /var/jenkins_home/workspace/dfs-dev-server/server:/app
-      - api_logs:/app/logs
+      - api_logs:/app/logs_volume
     working_dir: /app
     command: sh -c "npm install && npm run dev"
     networks:

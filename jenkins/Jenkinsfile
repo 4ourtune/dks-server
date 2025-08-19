@@ -42,6 +42,11 @@ pipeline {
                     ls -la server/ || echo "server directory not found"
                     
                     # Change to project root and start postgres
+                    # Clean up old volumes to prevent mount conflicts
+                    echo "Cleaning up old volumes..."
+                    docker-compose -f docker/docker-compose.yml down -v || true
+                    docker volume prune -f || true
+                    
                     echo "Starting postgres service..."
                     cd /var/jenkins_home/workspace/dfs-dev-server
                     docker-compose -f docker/docker-compose.yml up -d postgres
