@@ -52,7 +52,7 @@ pipeline {
                     
                     # Wait for postgres to be ready (smart waiting)
                     echo "Waiting for postgres to be ready..."
-                    for i in {1..30}; do
+                    for i in $(seq 1 30); do
                         if docker-compose -f docker/docker-compose.yml exec -T postgres pg_isready -U postgres; then
                             echo "Postgres is ready!"
                             break
@@ -82,8 +82,8 @@ pipeline {
                     
                     # Wait for API service to start (smart waiting)
                     echo "Waiting for API service to start..."
-                    for i in {1..60}; do
-                        if docker-compose -f docker/docker-compose.yml exec -T api sh -c "curl -s http://localhost:3000 > /dev/null"; then
+                    for i in $(seq 1 60); do
+                        if docker-compose -f docker/docker-compose.yml exec -T api sh -c "nc -z localhost 3000"; then
                             echo "API server is ready!"
                             break
                         fi
@@ -98,7 +98,7 @@ pipeline {
                     
                     # Verify API server is responding
                     echo "Verifying API server connectivity..."
-                    docker-compose -f docker/docker-compose.yml exec -T api sh -c "curl -f http://localhost:3000 || exit 1"
+                    docker-compose -f docker/docker-compose.yml exec -T api sh -c "nc -z localhost 3000 || exit 1"
                 '''
             }
             
