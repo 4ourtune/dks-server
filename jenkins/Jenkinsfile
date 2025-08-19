@@ -76,6 +76,19 @@ pipeline {
                     echo "Checking volume mount inside container:"
                     docker-compose -f docker/docker-compose.yml exec -T api sh -c "ls -la /app" || echo "Container not ready yet"
                     
+                    # Check mount details
+                    echo "Checking mount details inside container:"
+                    docker-compose -f docker/docker-compose.yml exec -T api sh -c "mount | grep /app" || echo "No mount info found"
+                    docker-compose -f docker/docker-compose.yml exec -T api sh -c "df -h /app" || echo "No disk info found"
+                    
+                    # Check host directory permissions
+                    echo "Host directory permissions:"
+                    ls -la /var/jenkins_home/workspace/dfs-dev-server/server
+                    
+                    # Check if Docker can access the path
+                    echo "Testing Docker volume mount directly:"
+                    docker run --rm -v /var/jenkins_home/workspace/dfs-dev-server/server:/test alpine ls -la /test || echo "Direct mount test failed"
+                    
                     # Show API logs
                     echo "API logs:"
                     docker-compose -f docker/docker-compose.yml logs api
