@@ -43,11 +43,9 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # Digital Key API Server
+  # Node.js API Service
   api:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    image: node:18-alpine
     container_name: dks-api-dev
     environment:
       NODE_ENV: development
@@ -64,23 +62,16 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Mount source code for development hot reload
-      - ../server/src:/app/src:ro
-      - ../server/dist:/app/dist
+      - ../server:/app
       - api_logs:/app/logs
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
     networks:
       - dks-network
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "node", "-e", "const http = require('http'); const req = http.request({host: 'localhost', port: 3000, path: '/health', timeout: 2000}, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.end();"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
 
 networks:
   dks-network:
