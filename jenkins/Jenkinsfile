@@ -50,9 +50,16 @@ pipeline {
                     echo "Postgres logs:"
                     docker-compose -f docker/docker-compose.yml logs postgres
                     
-                    # Wait longer for postgres to be ready
+                    # Wait for postgres to be ready (smart waiting)
                     echo "Waiting for postgres to be ready..."
-                    sleep 60
+                    for i in {1..30}; do
+                        if docker-compose -f docker/docker-compose.yml exec -T postgres pg_isready -U postgres; then
+                            echo "Postgres is ready!"
+                            break
+                        fi
+                        echo "Postgres not ready yet, waiting... ($i/30)"
+                        sleep 2
+                    done
                     
                     # Check postgres health
                     echo "Checking postgres health:"
@@ -61,15 +68,28 @@ pipeline {
                     
                     # Start API service
                     echo "Starting API service..."
+                    echo "Current PWD: $(pwd)"
+                    echo "Checking server directory exists: $(ls -la server/)"
                     docker-compose -f docker/docker-compose.yml up -d api
+                    
+                    # Check if volume mount worked
+                    echo "Checking volume mount inside container:"
+                    docker-compose -f docker/docker-compose.yml exec -T api sh -c "ls -la /app" || echo "Container not ready yet"
                     
                     # Show API logs
                     echo "API logs:"
                     docker-compose -f docker/docker-compose.yml logs api
                     
-                    # Wait for API service to start
+                    # Wait for API service to start (smart waiting)
                     echo "Waiting for API service to start..."
-                    sleep 60
+                    for i in {1..60}; do
+                        if docker-compose -f docker/docker-compose.yml exec -T api sh -c "curl -s http://localhost:3000 > /dev/null"; then
+                            echo "API server is ready!"
+                            break
+                        fi
+                        echo "API not ready yet, waiting... ($i/60)"
+                        sleep 3
+                    done
                     
                     # Check final status
                     echo "Final container status:"

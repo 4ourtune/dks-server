@@ -62,7 +62,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./server:/app
+      - ${PWD}/server:/app
       - api_logs:/app/logs
     working_dir: /app
     command: sh -c "npm install && npm run dev"
