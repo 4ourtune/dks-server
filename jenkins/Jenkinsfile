@@ -62,38 +62,52 @@ pipeline {
                 sh '''
                     cd docker
                     
-                    echo "Waiting for services to be ready..."
-                    sleep 30
-                    
-                    # PostgreSQL 헬스체크
-                    echo "Checking PostgreSQL..."
-                    for i in {1..10}; do
-                        if docker-compose exec -T postgres pg_isready -U postgres; then
-                            echo "PostgreSQL is ready!"
+                    # PostgreSQL 헬스체크 (최대 25초)
+                    echo "Checking PostgreSQL readiness..."
+                    POSTGRES_READY=false
+                    for i in {1..25}; do
+                        if docker-compose ps postgres | grep -q "Up.*healthy" && docker-compose exec -T postgres pg_isready -U postgres -d digital_key_system > /dev/null 2>&1; then
+                            echo "PostgreSQL is ready! (attempt $i)"
+                            POSTGRES_READY=true
                             break
                         fi
-                        echo "Waiting for PostgreSQL... ($i/10)"
-                        sleep 3
+                        echo "PostgreSQL not ready yet... ($i/25)"
+                        sleep 1
                     done
                     
-                    # API 서비스 헬스체크
-                    echo "Checking API service..."
-                    for i in {1..10}; do
-                        if docker-compose exec -T api curl -f http://localhost:3000/health; then
-                            echo "API service is ready!"
+                    if [ "$POSTGRES_READY" != "true" ]; then
+                        echo "PostgreSQL failed to become ready within 25 seconds"
+                        docker-compose logs postgres --tail 30
+                        exit 1
+                    fi
+                    
+                    # API 서비스 헬스체크 (최대 25초)
+                    echo "Checking API service readiness..."
+                    API_READY=false
+                    for i in {1..25}; do
+                        if docker-compose ps api | grep -q "Up" && docker-compose exec -T api curl -f -s http://localhost:3000/health > /dev/null 2>&1; then
+                            echo "API service is ready! (attempt $i)"
+                            API_READY=true
                             break
                         fi
-                        echo "Waiting for API service... ($i/10)"
-                        sleep 5
+                        echo "API service not ready yet... ($i/25)"
+                        sleep 1
                     done
                     
-                    # 최종 상태 확인
-                    echo "Final service status:"
+                    if [ "$API_READY" != "true" ]; then
+                        echo "API service failed to become ready within 25 seconds"
+                        echo "Container status:"
+                        docker-compose ps api
+                        echo "API service logs:"
+                        docker-compose logs api --tail 30
+                        exit 1
+                    fi
+                    
+                    # 성공 시 최종 상태 출력
+                    echo "✅ All services are ready!"
                     docker-compose ps
-                    
-                    # API 로그 확인
-                    echo "API service logs:"
-                    docker-compose logs api --tail 20
+                    echo "API health response:"
+                    docker-compose exec -T api curl -s http://localhost:3000/health
                 '''
             }
         }
