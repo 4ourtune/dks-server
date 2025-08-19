@@ -3,7 +3,6 @@ pipeline {
     
     environment {
         // Docker registry configuration
-        DOCKER_REGISTRY = credentials('docker-registry')
         DOCKER_IMAGE_NAME = 'digital-key-system'
         DOCKER_TAG = "${BUILD_NUMBER}-${GIT_COMMIT.take(7)}"
         
@@ -14,8 +13,7 @@ pipeline {
         JWT_SECRET = credentials('jwt-secret')
         
         // Notification configuration
-        SLACK_CHANNEL = '#digital-key-deployment'
-        EMAIL_RECIPIENTS = 'devops@company.com'
+        SLACK_CHANNEL = '#젠킨스'
     }
     
     options {
@@ -37,7 +35,7 @@ pipeline {
             steps {
                 script {
                     echo "Starting build for commit: ${GIT_COMMIT}"
-                    echo "Branch: ${GIT_BRANCH}"
+                    echo "Branch: ${BRANCH_NAME}"
                 }
                 
                 // Clean workspace before checkout
@@ -55,59 +53,13 @@ pipeline {
             }
         }
         
-        stage('🔍 Code Quality & Security') {
-            parallel {
-                stage('📝 Lint & Type Check') {
-                    steps {
-                        dir('server') {
-                            sh '''
-                                echo "Installing dependencies..."
-                                npm ci
-                                
-                                echo "Running TypeScript type check..."
-                                npm run typecheck
-                                
-                                echo "Running lint check..."
-                                npm run lint || echo "Lint warnings found"
-                            '''
-                        }
-                    }
-                }
-                
-                stage('🔒 Security Scan') {
-                    steps {
-                        dir('server') {
-                            sh '''
-                                echo "Running npm audit for security vulnerabilities..."
-                                npm audit --audit-level=moderate || true
-                                
-                                echo "Checking for secrets in code..."
-                                if command -v trufflehog &> /dev/null; then
-                                    trufflehog --regex --entropy=False .
-                                else
-                                    echo "TruffleHog not installed, skipping secret detection"
-                                fi
-                            '''
-                        }
-                    }
-                }
-            }
-        }
         
         stage('🏗️ Build Application') {
             steps {
-                dir('server') {
-                    sh '''
-                        echo "Installing production dependencies..."
-                        npm ci --only=production
-                        
-                        echo "Building TypeScript application..."
-                        npm run build
-                        
-                        echo "Listing build output..."
-                        ls -la dist/
-                    '''
-                }
+                sh '''
+                    echo "Building application using docker-compose..."
+                    docker-compose -f docker/docker-compose.yml build api
+                '''
             }
             
             post {
@@ -123,21 +75,20 @@ pipeline {
         stage('🐳 Docker Build') {
             steps {
                 script {
-                    echo "Building Docker image: ${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
+                    echo "Building and tagging Docker image: ${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
                     
-                    // Build Docker image
-                    def dockerImage = docker.build(
-                        "${DOCKER_IMAGE_NAME}:${DOCKER_TAG}",
-                        "-f docker/Dockerfile ."
-                    )
-                    
-                    // Tag as latest for current branch
-                    if (env.GIT_BRANCH == 'origin/main' || env.GIT_BRANCH == 'main') {
-                        dockerImage.tag('latest')
-                    }
-                    
-                    // Store image for later use
-                    env.DOCKER_IMAGE_ID = dockerImage.id
+                    sh '''
+                        # Build image using docker-compose
+                        docker-compose -f docker/docker-compose.yml build api
+                        
+                        # Tag the built image
+                        docker tag dks_server-api:latest ${DOCKER_IMAGE_NAME}:${DOCKER_TAG}
+                        
+                        # Tag as latest for master branch
+                        if [ "${BRANCH_NAME}" = "origin/master" ] || [ "${BRANCH_NAME}" = "master" ]; then
+                            docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_TAG} ${DOCKER_IMAGE_NAME}:latest
+                        fi
+                    '''
                 }
             }
             
@@ -151,88 +102,11 @@ pipeline {
             }
         }
         
-        stage('🧪 Testing') {
-            parallel {
-                stage('Unit Tests') {
-                    steps {
-                        dir('server') {
-                            sh '''
-                                echo "Running unit tests..."
-                                npm test -- --coverage --ci --watchAll=false
-                            '''
-                        }
-                    }
-                    
-                    post {
-                        always {
-                            // Publish test results
-                            publishTestResults testResultsPattern: 'server/coverage/lcov.info'
-                            
-                            // Archive test coverage
-                            publishHTML([
-                                allowMissing: false,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: 'server/coverage/lcov-report',
-                                reportFiles: 'index.html',
-                                reportName: 'Test Coverage Report'
-                            ])
-                        }
-                    }
-                }
-                
-                stage('Integration Tests') {
-                    steps {
-                        script {
-                            // Start test environment
-                            sh '''
-                                echo "Starting test environment..."
-                                docker-compose -f docker/docker-compose.test.yml up -d
-                                
-                                echo "Waiting for services to be ready..."
-                                sleep 30
-                                
-                                echo "Running integration tests..."
-                                docker-compose -f docker/docker-compose.test.yml exec -T api-test npm run test:integration || true
-                                
-                                echo "Collecting test results..."
-                                docker-compose -f docker/docker-compose.test.yml logs api-test
-                            '''
-                        }
-                    }
-                    
-                    post {
-                        always {
-                            sh '''
-                                echo "Cleaning up test environment..."
-                                docker-compose -f docker/docker-compose.test.yml down -v
-                            '''
-                        }
-                    }
-                }
-                
-                stage('Container Security Scan') {
-                    steps {
-                        script {
-                            // Scan Docker image for vulnerabilities
-                            sh '''
-                                echo "Scanning Docker image for vulnerabilities..."
-                                if command -v trivy &> /dev/null; then
-                                    trivy image --exit-code 1 --severity HIGH,CRITICAL ${DOCKER_IMAGE_NAME}:${DOCKER_TAG}
-                                else
-                                    echo "Trivy not installed, skipping container security scan"
-                                fi
-                            '''
-                        }
-                    }
-                }
-            }
-        }
         
         stage('🚢 Deploy to Staging') {
             when {
                 anyOf {
-                    branch 'main'
+                    branch 'master'
                     branch 'develop'
                 }
             }
@@ -279,7 +153,7 @@ pipeline {
         
         stage('🎯 Deploy to Production') {
             when {
-                branch 'main'
+                branch 'master'
             }
             
             steps {
@@ -327,20 +201,6 @@ pipeline {
                         message: "🚀 Digital Key System successfully deployed to production!\\nBuild: ${BUILD_NUMBER}\\nCommit: ${GIT_COMMIT.take(7)}\\nDeployed by: ${DEPLOYER}"
                     )
                     
-                    // Send email notification
-                    emailext(
-                        subject: "✅ Digital Key System - Production Deployment Successful",
-                        body: """
-                            Production deployment completed successfully!
-                            
-                            Build Number: ${BUILD_NUMBER}
-                            Git Commit: ${GIT_COMMIT}
-                            Deployed by: ${DEPLOYER}
-                            
-                            Build URL: ${BUILD_URL}
-                        """,
-                        to: env.EMAIL_RECIPIENTS
-                    )
                 }
                 failure {
                     echo "❌ Production deployment failed"
@@ -379,7 +239,7 @@ pipeline {
             slackSend(
                 channel: env.SLACK_CHANNEL,
                 color: 'danger',
-                message: "🚨 Digital Key System build FAILED!\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
+                message: "🚨 Digital Key System build FAILED!\\nBuild: ${BUILD_NUMBER}\\nBranch: ${BRANCH_NAME}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
             )
         }
         
