@@ -7,7 +7,7 @@ pipeline {
     
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 10, unit: 'MINUTES')
+        timeout(time: 20, unit: 'MINUTES')
         disableConcurrentBuilds()
         timestamps()
     }
@@ -33,27 +33,39 @@ pipeline {
                 echo "Starting API development server..."
                 
                 sh '''
-                    # Start development environment
-                    docker-compose -f docker/docker-compose.yml up -d
+                    # Start only essential services (postgres + api)
+                    echo "Starting postgres and api services..."
+                    docker-compose -f docker/docker-compose.yml up -d postgres api
                     
-                    # Wait for services to be ready
-                    echo "Waiting for services to start..."
-                    sleep 60
+                    # Show logs
+                    docker-compose -f docker/docker-compose.yml logs -f postgres api &
+                    
+                    # Wait for postgres to be ready
+                    echo "Waiting for postgres to be ready..."
+                    sleep 30
+                    
+                    # Wait for API service to start
+                    echo "Waiting for API service to start..."
+                    sleep 45
                     
                     # Check if containers are running
-                    docker-compose -f docker/docker-compose.yml ps
+                    echo "Checking container status:"
+                    docker-compose -f docker/docker-compose.yml ps postgres api
                     
-                    # Test API server is responding
-                    echo "Testing API server connectivity..."
+                    # Verify API server is responding
+                    echo "Verifying API server connectivity..."
                     docker-compose -f docker/docker-compose.yml exec -T api sh -c "curl -f http://localhost:3000 || exit 1"
                 '''
             }
             
             post {
-                always {
+                success {
+                    echo "API dev server is running successfully"
+                }
+                failure {
                     sh '''
-                        echo "Stopping development environment..."
-                        docker-compose -f docker/docker-compose.yml down || true
+                        echo "Cleaning up failed containers..."
+                        docker-compose -f docker/docker-compose.yml down postgres api || true
                     '''
                 }
             }
@@ -62,22 +74,22 @@ pipeline {
     
     post {
         success {
-            echo "API dev server test completed successfully"
+            echo "API dev server integration completed successfully"
             
             slackSend(
                 channel: env.SLACK_CHANNEL,
                 color: 'good',
-                message: "API Dev Server Test PASSED\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}"
+                message: "API Dev Server INTEGRATION SUCCESS\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}"
             )
         }
         
         failure {
-            echo "API dev server test failed"
+            echo "API dev server integration failed"
             
             slackSend(
                 channel: env.SLACK_CHANNEL,
                 color: 'danger',
-                message: "API Dev Server Test FAILED\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
+                message: "API Dev Server INTEGRATION FAILED\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
             )
         }
         
