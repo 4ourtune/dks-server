@@ -8,13 +8,13 @@ RUN apk add --no-cache curl
 WORKDIR /app
 
 # Copy package files first (for better caching)
-COPY package*.json ./
+COPY server/package*.json ./
 
 # Install dependencies
 RUN npm install
 
 # Copy source code
-COPY . .
+COPY server/ .
 
 # Create logs directory
 RUN mkdir -p logs

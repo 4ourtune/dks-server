@@ -46,8 +46,8 @@ services:
   # Node.js API Service - Dockerfile 빌드
   api:
     build:
-      context: ../server
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: dks-api-dev
     environment:
       NODE_ENV: development
