@@ -31,6 +31,85 @@ pipeline {
     }
     
     stages {
+        stage('🔍 Environment Debug') {
+            steps {
+                script {
+                    echo "=================================="
+                    echo "=== JENKINS BUILT-IN VARIABLES ==="
+                    echo "=================================="
+                    echo "BUILD_NUMBER: ${env.BUILD_NUMBER ?: 'NOT_SET'}"
+                    echo "BUILD_ID: ${env.BUILD_ID ?: 'NOT_SET'}"
+                    echo "JOB_NAME: ${env.JOB_NAME ?: 'NOT_SET'}"
+                    echo "WORKSPACE: ${env.WORKSPACE ?: 'NOT_SET'}"
+                    echo "JENKINS_URL: ${env.JENKINS_URL ?: 'NOT_SET'}"
+                    echo "NODE_NAME: ${env.NODE_NAME ?: 'NOT_SET'}"
+                    
+                    echo "\n========================="
+                    echo "=== GIT VARIABLES ==="
+                    echo "========================="
+                    echo "GIT_COMMIT: ${env.GIT_COMMIT ?: 'NOT_SET'}"
+                    echo "GIT_BRANCH: ${env.GIT_BRANCH ?: 'NOT_SET'}"
+                    echo "GIT_URL: ${env.GIT_URL ?: 'NOT_SET'}"
+                    echo "GIT_PREVIOUS_COMMIT: ${env.GIT_PREVIOUS_COMMIT ?: 'NOT_SET'}"
+                    echo "GIT_PREVIOUS_SUCCESSFUL_COMMIT: ${env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: 'NOT_SET'}"
+                    echo "GIT_LOCAL_BRANCH: ${env.GIT_LOCAL_BRANCH ?: 'NOT_SET'}"
+                    echo "GIT_AUTHOR_NAME: ${env.GIT_AUTHOR_NAME ?: 'NOT_SET'}"
+                    echo "GIT_AUTHOR_EMAIL: ${env.GIT_AUTHOR_EMAIL ?: 'NOT_SET'}"
+                    echo "GIT_COMMITTER_NAME: ${env.GIT_COMMITTER_NAME ?: 'NOT_SET'}"
+                    echo "GIT_COMMITTER_EMAIL: ${env.GIT_COMMITTER_EMAIL ?: 'NOT_SET'}"
+                    
+                    echo "\n============================"
+                    echo "=== MULTIBRANCH VARIABLES ==="
+                    echo "============================"
+                    echo "BRANCH_NAME: ${env.BRANCH_NAME ?: 'NOT_SET'}"
+                    echo "CHANGE_ID: ${env.CHANGE_ID ?: 'NOT_SET'}"
+                    echo "CHANGE_URL: ${env.CHANGE_URL ?: 'NOT_SET'}"
+                    echo "CHANGE_TITLE: ${env.CHANGE_TITLE ?: 'NOT_SET'}"
+                    echo "CHANGE_AUTHOR: ${env.CHANGE_AUTHOR ?: 'NOT_SET'}"
+                    echo "CHANGE_TARGET: ${env.CHANGE_TARGET ?: 'NOT_SET'}"
+                    
+                    echo "\n=========================="
+                    echo "=== GITHUB VARIABLES ==="
+                    echo "=========================="
+                    echo "GITHUB_URL: ${env.GITHUB_URL ?: 'NOT_SET'}"
+                    echo "GITHUB_TOKEN: ${env.GITHUB_TOKEN ? 'SET' : 'NOT_SET'}"
+                    
+                    echo "\n========================="
+                    echo "=== ALL ENV VARIABLES ==="
+                    echo "========================="
+                    env.getEnvironment().each { name, value ->
+                        if (name.contains('SECRET') || name.contains('PASSWORD') || name.contains('TOKEN')) {
+                            echo "${name} = [HIDDEN]"
+                        } else {
+                            echo "${name} = ${value}"
+                        }
+                    }
+                }
+                
+                echo "\n============================="
+                echo "=== SYSTEM ENVIRONMENT ==="
+                echo "============================="
+                sh 'printenv | sort'
+                
+                echo "\n==================="
+                echo "=== GIT STATUS ==="
+                echo "==================="
+                sh '''
+                    echo "Git branch info:"
+                    git branch -a || echo "No git branches found"
+                    
+                    echo "Current branch:"
+                    git rev-parse --abbrev-ref HEAD || echo "Cannot determine current branch"
+                    
+                    echo "Remote info:"
+                    git remote -v || echo "No git remotes found"
+                    
+                    echo "Latest commit:"
+                    git log --oneline -1 || echo "No git commits found"
+                '''
+            }
+        }
+        
         stage('Checkout') {
             steps {
                 script {
