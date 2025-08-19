@@ -46,6 +46,25 @@ pipeline {
                     # Docker 빌드 캐시 정리
                     docker system prune -f
                     
+                    # 데이터베이스 파일 존재 여부 확인
+                    echo "Checking database files from docker directory:"
+                    ls -la ../database/
+                    echo "Checking if postgres-schema.sql exists:"
+                    if [ -f "../database/postgres-schema.sql" ]; then
+                        echo "✅ postgres-schema.sql found"
+                        head -5 ../database/postgres-schema.sql
+                    else
+                        echo "❌ postgres-schema.sql NOT found"
+                        exit 1
+                    fi
+                    
+                    if [ -f "../database/seed-data.sql" ]; then
+                        echo "✅ seed-data.sql found"
+                    else
+                        echo "❌ seed-data.sql NOT found"
+                        exit 1
+                    fi
+                    
                     # 서비스 빌드 및 시작
                     echo "Building and starting all services..."
                     docker-compose up -d --build
@@ -81,25 +100,29 @@ pipeline {
                         exit 1
                     fi
                     
-                    # API 서비스 헬스체크 (최대 25초)
+                    # PostgreSQL이 준비되면 API 서비스 시작
+                    echo "Starting API service (schema will be auto-initialized)..."
+                    docker-compose up -d api
+                    
+                    # API 서비스 헬스체크 (최대 30초)
                     echo "Checking API service readiness..."
                     API_READY=false
-                    for i in {1..25}; do
+                    for i in {1..30}; do
                         if docker-compose ps api | grep -q "Up" && docker-compose exec -T api curl -f -s http://localhost:3000/health > /dev/null 2>&1; then
                             echo "API service is ready! (attempt $i)"
                             API_READY=true
                             break
                         fi
-                        echo "API service not ready yet... ($i/25)"
+                        echo "API service not ready yet... ($i/30)"
                         sleep 1
                     done
                     
                     if [ "$API_READY" != "true" ]; then
-                        echo "API service failed to become ready within 25 seconds"
+                        echo "API service failed to become ready within 30 seconds"
                         echo "Container status:"
                         docker-compose ps api
                         echo "API service logs:"
-                        docker-compose logs api --tail 30
+                        docker-compose logs api --tail 50
                         exit 1
                     fi
                     
