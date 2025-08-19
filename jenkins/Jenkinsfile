@@ -31,7 +31,7 @@ pipeline {
     }
     
     stages {
-        stage('🚀 Checkout') {
+        stage('Checkout') {
             steps {
                 script {
                     echo "Starting build for commit: ${GIT_COMMIT}"
@@ -54,7 +54,7 @@ pipeline {
         }
         
         
-        stage('🏗️ Build Application') {
+        stage('Build Application') {
             steps {
                 sh '''
                     echo "Building application using docker-compose..."
@@ -64,15 +64,15 @@ pipeline {
             
             post {
                 success {
-                    echo "✅ Application build completed successfully"
+                    echo "Application build completed successfully"
                 }
                 failure {
-                    echo "❌ Application build failed"
+                    echo "Application build failed"
                 }
             }
         }
         
-        stage('🐳 Docker Build') {
+        stage('Docker Build') {
             steps {
                 script {
                     echo "Building and tagging Docker image: ${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
@@ -94,16 +94,16 @@ pipeline {
             
             post {
                 success {
-                    echo "✅ Docker image built successfully"
+                    echo "Docker image built successfully"
                 }
                 failure {
-                    echo "❌ Docker image build failed"
+                    echo "Docker image build failed"
                 }
             }
         }
         
         
-        stage('🚢 Deploy to Staging') {
+        stage('Deploy to Staging') {
             when {
                 anyOf {
                     branch 'master'
@@ -136,22 +136,22 @@ pipeline {
             
             post {
                 success {
-                    echo "✅ Staging deployment successful"
+                    echo "Staging deployment successful"
                     
                     // Notify team about successful staging deployment
                     slackSend(
                         channel: env.SLACK_CHANNEL,
                         color: 'good',
-                        message: "✅ Digital Key System successfully deployed to staging\\nBuild: ${BUILD_NUMBER}\\nCommit: ${GIT_COMMIT.take(7)}"
+                        message: "Digital Key System successfully deployed to staging\\nBuild: ${BUILD_NUMBER}\\nCommit: ${GIT_COMMIT.take(7)}"
                     )
                 }
                 failure {
-                    echo "❌ Staging deployment failed"
+                    echo "Staging deployment failed"
                 }
             }
         }
         
-        stage('🎯 Deploy to Production') {
+        stage('Deploy to Production') {
             when {
                 branch 'master'
             }
@@ -192,24 +192,24 @@ pipeline {
             
             post {
                 success {
-                    echo "✅ Production deployment successful"
+                    echo "Production deployment successful"
                     
                     // Notify team about successful production deployment
                     slackSend(
                         channel: env.SLACK_CHANNEL,
                         color: 'good',
-                        message: "🚀 Digital Key System successfully deployed to production!\\nBuild: ${BUILD_NUMBER}\\nCommit: ${GIT_COMMIT.take(7)}\\nDeployed by: ${DEPLOYER}"
+                        message: "Digital Key System successfully deployed to production!\\nBuild: ${BUILD_NUMBER}\\nCommit: ${GIT_COMMIT.take(7)}\\nDeployed by: ${DEPLOYER}"
                     )
                     
                 }
                 failure {
-                    echo "❌ Production deployment failed"
+                    echo "Production deployment failed"
                     
                     // Notify team about failed production deployment
                     slackSend(
                         channel: env.SLACK_CHANNEL,
                         color: 'danger',
-                        message: "🚨 Digital Key System production deployment FAILED!\\nBuild: ${BUILD_NUMBER}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
+                        message: "Digital Key System production deployment FAILED!\\nBuild: ${BUILD_NUMBER}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
                     )
                 }
             }
@@ -229,22 +229,22 @@ pipeline {
         }
         
         success {
-            echo "🎉 Pipeline completed successfully!"
+            echo "Pipeline completed successfully!"
         }
         
         failure {
-            echo "💥 Pipeline failed!"
+            echo "Pipeline failed!"
             
             // Notify team about pipeline failure
             slackSend(
                 channel: env.SLACK_CHANNEL,
                 color: 'danger',
-                message: "🚨 Digital Key System build FAILED!\\nBuild: ${BUILD_NUMBER}\\nBranch: ${BRANCH_NAME}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
+                message: "Digital Key System build FAILED!\\nBuild: ${BUILD_NUMBER}\\nBranch: ${BRANCH_NAME}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
             )
         }
         
         unstable {
-            echo "⚠️ Pipeline completed with warnings"
+            echo "Pipeline completed with warnings"
         }
         
         cleanup {
