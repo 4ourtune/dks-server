@@ -42,15 +42,17 @@ pipeline {
                     ls -la server/ || echo "server directory not found"
                     
                     # Change to project root and start postgres
-                    # Clean up everything to prevent mount conflicts
-                    echo "Cleaning up old volumes and containers..."
-                    docker-compose -f docker/docker-compose.yml down -v || true
-                    docker system prune -f || true
+                    # Clean up everything to prevent mount conflicts (prune first, then down)
+                    echo "Cleaning up cached data first..."
+                    docker system prune -af || true
                     docker volume prune -f || true
                     
-                    # Force rebuild without cache
+                    # Force remove cached images before stopping containers
                     echo "Removing cached images..."
                     docker images | grep "node.*18-alpine" | awk '{print $3}' | xargs -r docker rmi -f || true
+                    
+                    echo "Stopping and removing containers/volumes..."
+                    docker-compose -f docker/docker-compose.yml down -v || true
                     
                     echo "Starting postgres service..."
                     cd /var/jenkins_home/workspace/dfs-dev-server
