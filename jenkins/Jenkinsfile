@@ -33,24 +33,39 @@ pipeline {
                 echo "Starting API development server..."
                 
                 sh '''
-                    # Start only essential services (postgres + api)
-                    echo "Starting postgres and api services..."
-                    docker-compose -f docker/docker-compose.yml up -d postgres api
+                    # Start postgres first
+                    echo "Starting postgres service..."
+                    docker-compose -f docker/docker-compose.yml up -d postgres
                     
-                    # Show logs
-                    docker-compose -f docker/docker-compose.yml logs -f postgres api &
+                    # Show postgres logs
+                    echo "Postgres logs:"
+                    docker-compose -f docker/docker-compose.yml logs postgres
                     
-                    # Wait for postgres to be ready
+                    # Wait longer for postgres to be ready
                     echo "Waiting for postgres to be ready..."
-                    sleep 30
+                    sleep 60
+                    
+                    # Check postgres health
+                    echo "Checking postgres health:"
+                    docker-compose -f docker/docker-compose.yml ps postgres
+                    docker-compose -f docker/docker-compose.yml logs postgres --tail 20
+                    
+                    # Start API service
+                    echo "Starting API service..."
+                    docker-compose -f docker/docker-compose.yml up -d api
+                    
+                    # Show API logs
+                    echo "API logs:"
+                    docker-compose -f docker/docker-compose.yml logs api
                     
                     # Wait for API service to start
                     echo "Waiting for API service to start..."
-                    sleep 45
+                    sleep 60
                     
-                    # Check if containers are running
-                    echo "Checking container status:"
-                    docker-compose -f docker/docker-compose.yml ps postgres api
+                    # Check final status
+                    echo "Final container status:"
+                    docker-compose -f docker/docker-compose.yml ps
+                    docker-compose -f docker/docker-compose.yml logs api --tail 20
                     
                     # Verify API server is responding
                     echo "Verifying API server connectivity..."
