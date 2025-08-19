@@ -2,253 +2,90 @@ pipeline {
     agent any
     
     environment {
-        // Docker registry configuration
-        DOCKER_IMAGE_NAME = 'digital-key-system'
-        DOCKER_TAG = "${BUILD_NUMBER}-${GIT_COMMIT.take(7)}"
-        
-        // Database configuration
-        DB_CREDENTIALS = credentials('postgres-credentials')
-        
-        // Application configuration
-        JWT_SECRET = credentials('jwt-secret')
-        
-        // Notification configuration
         SLACK_CHANNEL = '#젠킨스'
     }
     
     options {
-        // Keep only the last 10 builds
         buildDiscarder(logRotator(numToKeepStr: '10'))
-        
-        // Timeout after 30 minutes
-        timeout(time: 30, unit: 'MINUTES')
-        
-        // Disable concurrent builds
+        timeout(time: 10, unit: 'MINUTES')
         disableConcurrentBuilds()
-        
-        // Add timestamps to console output
         timestamps()
     }
     
     stages {
         stage('Checkout') {
             steps {
-                script {
-                    echo "Starting build for commit: ${GIT_COMMIT}"
-                    echo "Branch: ${GIT_BRANCH}"
-                }
+                echo "Starting build for commit: ${GIT_COMMIT}"
+                echo "Branch: ${GIT_BRANCH}"
                 
-                // Clean workspace before checkout
                 cleanWs()
-                
-                // Checkout code from repository
                 checkout scm
                 
-                // Display Git information
                 sh '''
                     echo "Git Information:"
                     git log --oneline -1
-                    git status
                 '''
             }
         }
         
-        
-        stage('Build Application') {
+        stage('Start API Dev Server') {
             steps {
+                echo "Starting API development server..."
+                
                 sh '''
-                    echo "Building application using docker-compose..."
-                    docker-compose -f docker/docker-compose.yml build api
+                    # Start development environment
+                    docker-compose -f docker/docker-compose.yml up -d
+                    
+                    # Wait for services to be ready
+                    echo "Waiting for services to start..."
+                    sleep 60
+                    
+                    # Check if containers are running
+                    docker-compose -f docker/docker-compose.yml ps
+                    
+                    # Test API server is responding
+                    echo "Testing API server connectivity..."
+                    docker-compose -f docker/docker-compose.yml exec -T api sh -c "curl -f http://localhost:3000 || exit 1"
                 '''
             }
             
             post {
-                success {
-                    echo "Application build completed successfully"
-                }
-                failure {
-                    echo "Application build failed"
-                }
-            }
-        }
-        
-        stage('Docker Build') {
-            steps {
-                script {
-                    echo "Building and tagging Docker image: ${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
-                    
+                always {
                     sh '''
-                        # Build image using docker-compose
-                        docker-compose -f docker/docker-compose.yml build api
-                        
-                        # Tag the built image
-                        docker tag dks_server-api:latest ${DOCKER_IMAGE_NAME}:${DOCKER_TAG}
-                        
-                        # Tag as latest for master branch
-                        if [ "${GIT_BRANCH}" = "origin/master" ] || [ "${GIT_BRANCH}" = "master" ]; then
-                            docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_TAG} ${DOCKER_IMAGE_NAME}:latest
-                        fi
+                        echo "Stopping development environment..."
+                        docker-compose -f docker/docker-compose.yml down || true
                     '''
-                }
-            }
-            
-            post {
-                success {
-                    echo "Docker image built successfully"
-                }
-                failure {
-                    echo "Docker image build failed"
-                }
-            }
-        }
-        
-        
-        stage('Deploy to Staging') {
-            when {
-                anyOf {
-                    branch 'master'
-                    branch 'develop'
-                }
-            }
-            
-            steps {
-                script {
-                    echo "Deploying to staging environment..."
-                    
-                    // Deploy to staging
-                    sh '''
-                        echo "Pulling latest changes to staging server..."
-                        # Here you would typically SSH to staging server or use deployment tools
-                        
-                        echo "Updating staging environment..."
-                        docker-compose -f docker/docker-compose.staging.yml down
-                        docker-compose -f docker/docker-compose.staging.yml pull
-                        docker-compose -f docker/docker-compose.staging.yml up -d
-                        
-                        echo "Waiting for staging deployment to be ready..."
-                        sleep 60
-                        
-                        echo "Running health checks..."
-                        curl -f http://staging.digitalkey.local/health || exit 1
-                    '''
-                }
-            }
-            
-            post {
-                success {
-                    echo "Staging deployment successful"
-                    
-                    // Notify team about successful staging deployment
-                    slackSend(
-                        channel: env.SLACK_CHANNEL,
-                        color: 'good',
-                        message: "Digital Key System successfully deployed to staging\\nBuild: ${BUILD_NUMBER}\\nCommit: ${GIT_COMMIT.take(7)}"
-                    )
-                }
-                failure {
-                    echo "Staging deployment failed"
-                }
-            }
-        }
-        
-        stage('Deploy to Production') {
-            when {
-                branch 'master'
-            }
-            
-            steps {
-                script {
-                    // Manual approval for production deployment
-                    input message: 'Deploy to production?', 
-                          ok: 'Deploy',
-                          submitterParameter: 'DEPLOYER'
-                    
-                    echo "Production deployment approved by: ${DEPLOYER}"
-                    
-                    // Deploy to production
-                    sh '''
-                        echo "Deploying to production environment..."
-                        
-                        # Backup current production database
-                        echo "Creating database backup..."
-                        # pg_dump commands would go here
-                        
-                        echo "Updating production environment..."
-                        docker-compose -f docker/docker-compose.prod.yml down --timeout 30
-                        docker-compose -f docker/docker-compose.prod.yml pull
-                        docker-compose -f docker/docker-compose.prod.yml up -d
-                        
-                        echo "Waiting for production deployment to be ready..."
-                        sleep 120
-                        
-                        echo "Running production health checks..."
-                        curl -f https://api.digitalkey.com/health || exit 1
-                        
-                        echo "Running smoke tests..."
-                        # Add smoke tests here
-                    '''
-                }
-            }
-            
-            post {
-                success {
-                    echo "Production deployment successful"
-                    
-                    // Notify team about successful production deployment
-                    slackSend(
-                        channel: env.SLACK_CHANNEL,
-                        color: 'good',
-                        message: "Digital Key System successfully deployed to production!\\nBuild: ${BUILD_NUMBER}\\nCommit: ${GIT_COMMIT.take(7)}\\nDeployed by: ${DEPLOYER}"
-                    )
-                    
-                }
-                failure {
-                    echo "Production deployment failed"
-                    
-                    // Notify team about failed production deployment
-                    slackSend(
-                        channel: env.SLACK_CHANNEL,
-                        color: 'danger',
-                        message: "Digital Key System production deployment FAILED!\\nBuild: ${BUILD_NUMBER}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
-                    )
                 }
             }
         }
     }
     
     post {
-        always {
-            // Clean up Docker images to save space
-            sh '''
-                echo "Cleaning up old Docker images..."
-                docker image prune -af --filter "until=72h"
-            '''
-            
-            // Archive build artifacts
-            archiveArtifacts artifacts: 'server/dist/**/*', allowEmptyArchive: true
-        }
-        
         success {
-            echo "Pipeline completed successfully!"
-        }
-        
-        failure {
-            echo "Pipeline failed!"
+            echo "API dev server test completed successfully"
             
-            // Notify team about pipeline failure
             slackSend(
                 channel: env.SLACK_CHANNEL,
-                color: 'danger',
-                message: "Digital Key System build FAILED!\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
+                color: 'good',
+                message: "API Dev Server Test PASSED\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}"
             )
         }
         
-        unstable {
-            echo "Pipeline completed with warnings"
+        failure {
+            echo "API dev server test failed"
+            
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'danger',
+                message: "API Dev Server Test FAILED\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
+            )
         }
         
-        cleanup {
-            // Final cleanup
+        always {
+            sh '''
+                echo "Cleaning up..."
+                docker system prune -f || true
+            '''
             cleanWs()
         }
     }
