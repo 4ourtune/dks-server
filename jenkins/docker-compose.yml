@@ -1,6 +1,5 @@
 services:
   jenkins:
-    # 기존 Jenkins LTS 유지
     image: jenkins/jenkins:lts
     privileged: true
     user: root
@@ -12,29 +11,22 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
-      - JENKINS_OPTS="--httpPort=8080"
-      - JAVA_OPTS="-Djava.awt.headless=true -Xmx1024m"
+      - JENKINS_OPTS=--httpPort=8080
+      - JAVA_OPTS=-Djava.awt.headless=true -Xmx1024m
     restart: unless-stopped
-    entrypoint: |
-      bash -c "
-        # Docker 설치
+    entrypoint:
+      - bash
+      - -c
+      - |
         apt-get update
-        apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
-        curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-        echo \"deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian bullseye stable\" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-        apt-get update
-        apt-get install -y docker-ce-cli
-        
-        # Docker Compose 설치
-        curl -L \"https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-\$(uname -s)-\$(uname -m)\" -o /usr/local/bin/docker-compose
+        apt-get install -y docker.io curl
+        curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
         chmod +x /usr/local/bin/docker-compose
-        
-        # Jenkins 사용자를 docker 그룹에 추가
+        groupadd -f docker
         usermod -aG docker jenkins
-        
-        # 기존 Jenkins 엔트리포인트 실행
+        docker --version
+        docker-compose --version
         exec /usr/local/bin/jenkins.sh
-      "
 
 volumes:
   jenkins_home:
