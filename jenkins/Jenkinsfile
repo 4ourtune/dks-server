@@ -7,7 +7,7 @@ pipeline {
     
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 20, unit: 'MINUTES')
+        timeout(time: 15, unit: 'MINUTES')
         disableConcurrentBuilds()
         timestamps()
     }
@@ -24,150 +24,114 @@ pipeline {
                 sh '''
                     echo "Git Information:"
                     git log --oneline -1
+                    echo "Current directory structure:"
+                    ls -la
+                    echo "Server directory:"
+                    ls -la server/
+                    echo "Database directory:"
+                    ls -la database/
                 '''
             }
         }
         
-        stage('Start API Dev Server') {
+        stage('Build and Start Services') {
             steps {
-                echo "Starting API development server..."
+                echo "Building and starting development services..."
                 
                 sh '''
-                    # Debug: Check file structure
-                    echo "Current directory:"
-                    pwd
-                    echo "Files in current directory:"
-                    ls -la
-                    echo "Files in server directory:"
-                    ls -la server/ || echo "server directory not found"
+                    # 기존 컨테이너 정리
+                    cd docker
+                    docker-compose down -v || true
                     
-                    # Change to project root and start postgres
-                    # Aggressive cleanup to prevent mount conflicts
-                    echo "Force stopping all containers first..."
-                    docker stop $(docker ps -aq) || true
-                    docker rm $(docker ps -aq) || true
+                    # Docker 빌드 캐시 정리
+                    docker system prune -f
                     
-                    echo "Removing all volumes and images..."
-                    docker volume rm $(docker volume ls -q) || true
-                    docker rmi $(docker images -q) -f || true
+                    # 서비스 빌드 및 시작
+                    echo "Building and starting all services..."
+                    docker-compose up -d --build
                     
-                    echo "Final system cleanup..."
-                    docker system prune -af --volumes || true
+                    # 서비스 상태 확인
+                    echo "Service status:"
+                    docker-compose ps
+                '''
+            }
+        }
+        
+        stage('Health Check') {
+            steps {
+                sh '''
+                    cd docker
                     
-                    echo "Starting postgres service..."
-                    cd /var/jenkins_home/workspace/dfs-dev-server
-                    docker-compose -f docker/docker-compose.yml up -d postgres
+                    echo "Waiting for services to be ready..."
+                    sleep 30
                     
-                    # Show postgres logs
-                    echo "Postgres logs:"
-                    docker-compose -f docker/docker-compose.yml logs postgres
-                    
-                    # Wait for postgres to be ready (smart waiting)
-                    echo "Waiting for postgres to be ready..."
-                    for i in $(seq 1 30); do
-                        if docker-compose -f docker/docker-compose.yml exec -T postgres pg_isready -U postgres; then
-                            echo "Postgres is ready!"
+                    # PostgreSQL 헬스체크
+                    echo "Checking PostgreSQL..."
+                    for i in {1..10}; do
+                        if docker-compose exec -T postgres pg_isready -U postgres; then
+                            echo "PostgreSQL is ready!"
                             break
                         fi
-                        echo "Postgres not ready yet, waiting... ($i/30)"
-                        sleep 2
-                    done
-                    
-                    # Check postgres health
-                    echo "Checking postgres health:"
-                    docker-compose -f docker/docker-compose.yml ps postgres
-                    docker-compose -f docker/docker-compose.yml logs postgres --tail 20
-                    
-                    # Start API service
-                    echo "Starting API service..."
-                    echo "Current PWD: $(pwd)"
-                    echo "Checking server directory exists: $(ls -la server/)"
-                    docker-compose -f docker/docker-compose.yml up -d api
-                    
-                    # Check if volume mount worked
-                    echo "Checking volume mount inside container:"
-                    docker-compose -f docker/docker-compose.yml exec -T api sh -c "ls -la /app" || echo "Container not ready yet"
-                    
-                    # Check mount details
-                    echo "Checking mount details inside container:"
-                    docker-compose -f docker/docker-compose.yml exec -T api sh -c "mount | grep /app" || echo "No mount info found"
-                    docker-compose -f docker/docker-compose.yml exec -T api sh -c "df -h /app" || echo "No disk info found"
-                    
-                    # Check host directory permissions
-                    echo "Host directory permissions:"
-                    ls -la /var/jenkins_home/workspace/dfs-dev-server/server
-                    
-                    # Check if Docker can access the path
-                    echo "Testing Docker volume mount directly:"
-                    docker run --rm -v /var/jenkins_home/workspace/dfs-dev-server/server:/test alpine ls -la /test || echo "Direct mount test failed"
-                    
-                    # Show API logs
-                    echo "API logs:"
-                    docker-compose -f docker/docker-compose.yml logs api
-                    
-                    # Wait for API service to start (smart waiting)
-                    echo "Waiting for API service to start..."
-                    for i in $(seq 1 60); do
-                        if docker-compose -f docker/docker-compose.yml exec -T api sh -c "nc -z localhost 3000"; then
-                            echo "API server is ready!"
-                            break
-                        fi
-                        echo "API not ready yet, waiting... ($i/60)"
+                        echo "Waiting for PostgreSQL... ($i/10)"
                         sleep 3
                     done
                     
-                    # Check final status
-                    echo "Final container status:"
-                    docker-compose -f docker/docker-compose.yml ps
-                    docker-compose -f docker/docker-compose.yml logs api --tail 20
+                    # API 서비스 헬스체크
+                    echo "Checking API service..."
+                    for i in {1..10}; do
+                        if docker-compose exec -T api curl -f http://localhost:3000/health; then
+                            echo "API service is ready!"
+                            break
+                        fi
+                        echo "Waiting for API service... ($i/10)"
+                        sleep 5
+                    done
                     
-                    # Verify API server is responding
-                    echo "Verifying API server connectivity..."
-                    docker-compose -f docker/docker-compose.yml exec -T api sh -c "nc -z localhost 3000 || exit 1"
+                    # 최종 상태 확인
+                    echo "Final service status:"
+                    docker-compose ps
+                    
+                    # API 로그 확인
+                    echo "API service logs:"
+                    docker-compose logs api --tail 20
                 '''
-            }
-            
-            post {
-                success {
-                    echo "API dev server is running successfully"
-                }
-                failure {
-                    sh '''
-                        echo "Cleaning up failed containers..."
-                        docker-compose -f docker/docker-compose.yml down postgres api || true
-                    '''
-                }
             }
         }
     }
     
     post {
         success {
-            echo "API dev server integration completed successfully"
+            echo "Development environment built and started successfully!"
             
             slackSend(
                 channel: env.SLACK_CHANNEL,
                 color: 'good',
-                message: "API Dev Server INTEGRATION SUCCESS\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}"
+                message: "API Dev Server BUILD SUCCESS\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}"
             )
         }
         
         failure {
-            echo "API dev server integration failed"
+            echo "Failed to build/start development environment"
+            
+            sh '''
+                cd docker
+                echo "Failure diagnostics:"
+                docker-compose ps
+                docker-compose logs
+            '''
             
             slackSend(
                 channel: env.SLACK_CHANNEL,
                 color: 'danger',
-                message: "API Dev Server INTEGRATION FAILED\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
+                message: "API Dev Server BUILD FAILED\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
             )
         }
         
         always {
             sh '''
-                echo "Cleaning up..."
+                echo "Cleaning up build cache..."
                 docker system prune -f || true
             '''
-            cleanWs()
         }
     }
 }

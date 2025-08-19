@@ -43,9 +43,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # Node.js API Service
+  # Node.js API Service - Dockerfile 빌드
   api:
-    image: node:18-alpine
+    build:
+      context: ./server
+      dockerfile: Dockerfile
     container_name: dks-api-dev
     environment:
       NODE_ENV: development
@@ -61,11 +63,6 @@ services:
       PORT: 3000
     ports:
       - "3000:3000"
-    volumes:
-      - /var/jenkins_home/workspace/dfs-dev-server/server:/app
-      - api_logs:/app/logs_volume
-    working_dir: /app
-    command: sh -c "npm install && npm run dev"
     networks:
       - dks-network
     depends_on:
@@ -81,6 +78,4 @@ volumes:
   postgres_data:
     driver: local
   pgadmin_data:
-    driver: local
-  api_logs:
     driver: local
