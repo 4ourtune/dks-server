@@ -3,6 +3,10 @@ pipeline {
     
     environment {
         SLACK_CHANNEL = '#jenkins'
+        API_PORT = '3000'
+        SERVER_IP = '34.46.208.174'
+        POSTGRES_HEALTH_TIMEOUT = '25'
+        API_STARTUP_WAIT = '5'
     }
     
     options {
@@ -15,84 +19,45 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                echo "Starting build for commit: ${GIT_COMMIT}"
-                echo "Branch: ${GIT_BRANCH}"
-                
+                echo "Starting build - Branch: ${GIT_BRANCH} | Commit: ${GIT_COMMIT.take(7)}"
                 cleanWs()
                 checkout scm
-                
-                sh '''
-                    echo "Git Information:"
-                    git log --oneline -1
-                '''
             }
         }
         
-        stage('Build and Start Services') {
+        stage('Build') {
             steps {
-                echo "Building and starting development services..."
-                
+                echo "Building and starting services..."
                 sh '''
                     cd docker
-                    
-                    # 기존 컨테이너만 중지 (볼륨 유지로 빠른 재시작)
                     docker-compose down || true
-                    
-                    # 서비스 빌드 및 시작 (캐시 활용)
-                    echo "Starting services..."
                     docker-compose up -d --build
                 '''
             }
         }
         
-        stage('Health Check') {
+        stage('Check') {
             steps {
+                echo "Checking service health..."
                 sh '''
                     cd docker
                     
-                    # PostgreSQL 헬스체크 (최대 25초)
-                    echo "Checking PostgreSQL readiness..."
-                    POSTGRES_READY=false
-                    for i in {1..25}; do
-                        if docker-compose ps postgres | grep -q "Up.*healthy" && docker-compose exec -T postgres pg_isready -U postgres -d digital_key_system > /dev/null 2>&1; then
-                            echo "PostgreSQL is ready!"
-                            POSTGRES_READY=true
+                    echo "Waiting for PostgreSQL..."
+                    for i in {1..${POSTGRES_HEALTH_TIMEOUT}}; do
+                        if docker-compose exec -T postgres pg_isready -U postgres -d digital_key_system > /dev/null 2>&1; then
+                            echo "PostgreSQL ready!"
                             break
                         fi
                         sleep 1
                     done
                     
-                    if [ "$POSTGRES_READY" != "true" ]; then
-                        echo "PostgreSQL failed to become ready within 25 seconds"
-                        docker-compose logs postgres --tail 30
-                        exit 1
-                    fi
-                    
-                    # PostgreSQL이 준비되면 API 서비스 시작
-                    echo "Starting API service (schema will be auto-initialized)..."
+                    echo "Starting API service..."
                     docker-compose up -d api
+                    sleep ${API_STARTUP_WAIT}
                     
-                    # 간단한 서비스 상태 확인
-                    echo "API service started, checking status..."
-                    sleep 5  # 최소한의 대기
-                    
-                    if docker-compose ps api | grep -q "Up"; then
-                        echo "API service is running and ready"
-                    else
-                        echo "API service status check"
-                        docker-compose ps api
-                    fi
-                    
-                    # 성공 시 최종 상태 출력
-                    echo "All services are ready!"
+                    echo "Services status:"
                     docker-compose ps
-                    
-                    # 외부 접근을 위한 방화벽 설정 확인
-                    echo "Checking firewall status for port 3000..."
-                    sudo ufw status | grep 3000 || echo "Port 3000 not configured in firewall"
-                    
-                    echo "Testing external API access..."
-                    echo "API should be accessible at: http://34.46.208.174:3000/health"
+                    echo "API accessible at: http://${SERVER_IP}:${API_PORT}/health"
                 '''
             }
         }
@@ -101,43 +66,28 @@ pipeline {
     
     post {
         success {
-            echo "Development environment built and started successfully!"
-            
+            echo "Build completed successfully!"
             slackSend(
                 channel: env.SLACK_CHANNEL,
                 color: 'good',
-                message: "API Dev Server BUILD SUCCESS\nBuild: ${BUILD_NUMBER}\nBranch: ${GIT_BRANCH}\nCommit: ${GIT_COMMIT.take(7)}\nCheck: ${BUILD_URL}"
+                message: "BUILD SUCCESS\nBuild: #${BUILD_NUMBER}\nBranch: ${GIT_BRANCH}\nCommit: ${GIT_COMMIT.take(7)}\nURL: ${BUILD_URL}"
             )
         }
         
         failure {
-            echo "Failed to build/start development environment"
-            
-            sh '''
-                cd docker
-                echo "Failure diagnostics:"
-                docker-compose ps
-                docker-compose logs
-            '''
-            
+            echo "Build failed"
+            sh 'cd docker && docker-compose logs --tail 20'
             slackSend(
                 channel: env.SLACK_CHANNEL,
                 color: 'danger',
-                message: "API Dev Server BUILD FAILED | Build #${BUILD_NUMBER} | ${GIT_BRANCH} | ${GIT_COMMIT.take(7)} | Check: ${BUILD_URL}"
+                message: "BUILD FAILED\nBuild: #${BUILD_NUMBER}\nBranch: ${GIT_BRANCH}\nCommit: ${GIT_COMMIT.take(7)}\nURL: ${BUILD_URL}"
             )
         }
         
         always {
             sh '''
-                echo "=== Container Verification ==="
-                echo "All Docker containers:"
-                docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
-                
-                echo "Docker-compose project containers:"
                 cd docker
                 docker-compose ps
-                
-                echo "=== Cleanup ==="
                 docker system prune -f || true
             '''
         }
