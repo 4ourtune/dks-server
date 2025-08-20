@@ -76,7 +76,7 @@ pipeline {
                     echo "Checking API service readiness..."
                     API_READY=false
                     for i in {1..30}; do
-                        if docker-compose ps api | grep -q "Up" && curl -f -s http://34.46.208.174:3000/health > /dev/null 2>&1; then
+                        if docker-compose ps api | grep -q "Up" && curl -f -s http://localhost:3000/health > /dev/null 2>&1; then
                             echo "API service is ready!"
                             API_READY=true
                             break
@@ -96,6 +96,29 @@ pipeline {
                     # 성공 시 최종 상태 출력
                     echo "All services are ready!"
                     docker-compose ps
+                    
+                    # 외부 접근을 위한 방화벽 설정 확인
+                    echo "Checking firewall status for port 3000..."
+                    sudo ufw status | grep 3000 || echo "Port 3000 not configured in firewall"
+                    
+                    echo "Testing external API access..."
+                    echo "API should be accessible at: http://34.46.208.174:3000/health"
+                '''
+            }
+        }
+
+        stage('Container Verification') {
+            steps {
+                sh '''
+                    echo "=== All Docker containers ==="
+                    docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+                    
+                    echo "=== Docker-compose project containers ==="
+                    cd docker
+                    docker-compose ps
+                    
+                    echo "=== Jenkins container check ==="
+                    docker ps | grep jenkins || echo "Jenkins container not visible from compose context"
                 '''
             }
         }
