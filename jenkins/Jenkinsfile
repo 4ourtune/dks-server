@@ -106,7 +106,7 @@ pipeline {
             slackSend(
                 channel: env.SLACK_CHANNEL,
                 color: 'good',
-                message: "API Dev Server BUILD SUCCESS | Build #${BUILD_NUMBER} | ${GIT_BRANCH} | ${GIT_COMMIT.take(7)}"
+                message: "API Dev Server BUILD SUCCESS\nBuild: ${BUILD_NUMBER}\nBranch: ${GIT_BRANCH}\nCommit: ${GIT_COMMIT.take(7)}\nCheck: ${BUILD_URL}"
             )
         }
         
