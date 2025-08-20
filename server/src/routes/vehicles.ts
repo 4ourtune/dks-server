@@ -17,6 +17,23 @@ const vehicleCommandRateLimit = rateLimit(60 * 1000, 30);
 const vehicleManagementRateLimit = rateLimit(60 * 1000, 10);
 const vehicleStatusRateLimit = rateLimit(60 * 1000, 100);
 
+// System vehicle registration (for admin/system use)
+router.post('/system', 
+    authenticateToken,
+    vehicleManagementRateLimit,
+    validate(vehicleSchema), 
+    vehicleController.registerSystemVehicle
+);
+
+// User vehicle registration (user connects to existing vehicle)
+router.post('/:vehicleId/register', 
+    authenticateToken,
+    vehicleManagementRateLimit,
+    validate(vehicleIdParamSchema),
+    vehicleController.registerUserToVehicle
+);
+
+// Legacy endpoint (kept for backward compatibility)
 router.post('/', 
     authenticateToken,
     vehicleManagementRateLimit,
@@ -53,6 +70,7 @@ router.delete('/:vehicleId',
     vehicleController.deleteVehicle
 );
 
+// Door control APIs
 router.post('/:vehicleId/unlock', 
     authenticateToken,
     vehicleCommandRateLimit,
@@ -67,6 +85,22 @@ router.post('/:vehicleId/lock',
     validate(vehicleCommandSchema),
     requireVehicleAccess,
     vehicleController.lock
+);
+
+router.post('/:vehicleId/door/open', 
+    authenticateToken,
+    vehicleCommandRateLimit,
+    validate(vehicleCommandSchema),
+    requireVehicleAccess,
+    vehicleController.openDoor
+);
+
+router.post('/:vehicleId/door/close', 
+    authenticateToken,
+    vehicleCommandRateLimit,
+    validate(vehicleCommandSchema),
+    requireVehicleAccess,
+    vehicleController.closeDoor
 );
 
 router.post('/:vehicleId/start', 

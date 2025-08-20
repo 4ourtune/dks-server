@@ -11,7 +11,7 @@ class VehicleModel {
     async create(vehicleData: Omit<Vehicle, 'id' | 'created_at' | 'updated_at'>): Promise<Vehicle> {
         const result = await this.db.run(
             'INSERT INTO vehicles (vin, model, owner_id, tc375_device_id, status) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-            [vehicleData.vin, vehicleData.model, vehicleData.owner_id, vehicleData.tc375_device_id, vehicleData.status]
+            [vehicleData.vin, vehicleData.model, vehicleData.owner_id || null, vehicleData.tc375_device_id, vehicleData.status]
         );
 
         const vehicle = await this.findById(result.lastID!);
@@ -72,6 +72,11 @@ class VehicleModel {
         if (vehicleData.status) {
             updateFields.push(`status = $${updateValues.length + 1}`);
             updateValues.push(vehicleData.status);
+        }
+
+        if (vehicleData.owner_id !== undefined) {
+            updateFields.push(`owner_id = $${updateValues.length + 1}`);
+            updateValues.push(vehicleData.owner_id);
         }
 
         updateFields.push('updated_at = CURRENT_TIMESTAMP');

@@ -11,7 +11,7 @@ export interface Vehicle {
     id?: number;
     vin: string;
     model: string;
-    owner_id: number;
+    owner_id: number | null;
     tc375_device_id: string;
     status: 'active' | 'inactive' | 'maintenance';
     created_at?: string;
@@ -34,13 +34,16 @@ export interface KeyPermissions {
     unlock: boolean;
     start: boolean;
     trunk: boolean;
+    lock?: boolean;
+    door_open?: boolean;
+    door_close?: boolean;
 }
 
 export interface AccessLog {
     id?: number;
     user_id: number;
     vehicle_id: number;
-    action: 'unlock' | 'lock' | 'start' | 'stop' | 'status_check';
+    action: 'unlock' | 'lock' | 'start' | 'stop' | 'door_open' | 'door_close' | 'status_check';
     result: 'success' | 'failure' | 'timeout';
     error_message?: string;
     ip_address?: string;
@@ -54,18 +57,25 @@ export interface AuthTokens {
 }
 
 export interface VehicleStatus {
-    locked: boolean;
-    engine_running: boolean;
-    battery_level: number;
+    door_locked?: boolean;
+    door_open?: boolean;
+    engine_running?: boolean;
+    battery_level?: number;
+    latitude?: number;
+    longitude?: number;
+    location_updated?: string;
+    last_update?: string;
+    // Legacy fields for backward compatibility
+    locked?: boolean;
     location?: {
         latitude: number;
         longitude: number;
     };
-    last_updated: string;
+    last_updated?: string;
 }
 
 export interface VehicleCommand {
-    action: 'unlock' | 'lock' | 'start' | 'stop';
+    action: 'unlock' | 'lock' | 'start' | 'stop' | 'door_open' | 'door_close';
     user_id: number;
     vehicle_id: number;
     key_id: number;
@@ -78,7 +88,7 @@ export interface SocketEvent {
     'vehicle:status_update': { vehicle_id: number; status: VehicleStatus };
     'vehicle:command_result': { 
         vehicle_id: number; 
-        action: string; 
+        action: 'unlock' | 'lock' | 'start' | 'stop' | 'door_open' | 'door_close'; 
         result: 'success' | 'failure' | 'timeout';
         error_message?: string;
     };

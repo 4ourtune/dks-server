@@ -15,6 +15,115 @@ class VehicleController {
         this.logger = LoggerService.getInstance();
     }
 
+    // System vehicle registration - creates a new vehicle in the system
+    registerSystemVehicle = async (req: AuthRequest, res: Response): Promise<void> => {
+        try {
+            const userId = req.user?.id;
+            if (!userId) {
+                res.status(401).json({ error: 'Authentication required' });
+                return;
+            }
+
+            const { vin, model, tc375_device_id, status = 'active' } = req.body;
+
+            const vehicle = await this.vehicleService.registerVehicle({
+                vin,
+                model,
+                owner_id: null, // System vehicle has no initial owner
+                tc375_device_id,
+                status
+            });
+
+            this.logger.vehicle('system_register', { vehicleId: vehicle.id!, adminUserId: userId, success: true });
+
+            res.status(201).json({
+                message: 'Vehicle registered in system successfully',
+                vehicle: {
+                    id: vehicle.id,
+                    vin: vehicle.vin,
+                    model: vehicle.model,
+                    tc375_device_id: vehicle.tc375_device_id,
+                    status: vehicle.status,
+                    created_at: vehicle.created_at
+                }
+            });
+        } catch (error) {
+            this.logger.error('System vehicle registration error', error, { 
+                adminUserId: req.user?.id,
+                requestData: req.body 
+            });
+            
+            if (error instanceof Error) {
+                res.status(400).json({ error: error.message });
+            } else {
+                res.status(500).json({ error: 'Failed to register vehicle in system' });
+            }
+        }
+    };
+
+    // User vehicle registration - user connects to existing vehicle
+    registerUserToVehicle = async (req: AuthRequest, res: Response): Promise<void> => {
+        try {
+            const userId = req.user?.id;
+            if (!userId) {
+                res.status(401).json({ error: 'Authentication required' });
+                return;
+            }
+
+            const vehicleId = parseInt(req.params.vehicleId);
+            const vehicle = await this.vehicleService.getVehicleById(vehicleId);
+
+            if (!vehicle) {
+                res.status(404).json({ error: 'Vehicle not found' });
+                return;
+            }
+
+            if (vehicle.owner_id !== null) {
+                res.status(400).json({ error: 'Vehicle is already registered to another user' });
+                return;
+            }
+
+            // Register user as vehicle owner
+            const updatedVehicle = await this.vehicleService.updateVehicle(vehicleId, {
+                owner_id: userId
+            });
+
+            // Create a digital key for the user
+            await this.keyService.registerKey({
+                vehicle_id: vehicleId,
+                user_id: userId,
+                key_name: `${vehicle.model} - Owner Key`,
+                permissions: ['unlock', 'lock', 'start', 'stop', 'door_open', 'door_close'],
+                is_active: true
+            });
+
+            this.logger.vehicle('user_register', { vehicleId, userId, success: true });
+
+            res.status(200).json({
+                message: 'Successfully registered to vehicle',
+                vehicle: {
+                    id: updatedVehicle!.id,
+                    vin: updatedVehicle!.vin,
+                    model: updatedVehicle!.model,
+                    status: updatedVehicle!.status,
+                    owner_id: updatedVehicle!.owner_id
+                }
+            });
+        } catch (error) {
+            this.logger.error('User vehicle registration error', error, { 
+                userId: req.user?.id,
+                vehicleId: req.params.vehicleId 
+            });
+            
+            if (error instanceof Error) {
+                res.status(400).json({ error: error.message });
+            } else {
+                res.status(500).json({ error: 'Failed to register to vehicle' });
+            }
+        }
+    };
+
+    // Legacy method for backward compatibility
     registerVehicle = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
             const userId = req.user?.id;
@@ -240,10 +349,18 @@ class VehicleController {
         await this.executeVehicleCommand(req, res, 'stop');
     };
 
+    openDoor = async (req: AuthRequest, res: Response): Promise<void> => {
+        await this.executeVehicleCommand(req, res, 'door_open');
+    };
+
+    closeDoor = async (req: AuthRequest, res: Response): Promise<void> => {
+        await this.executeVehicleCommand(req, res, 'door_close');
+    };
+
     private executeVehicleCommand = async (
         req: AuthRequest, 
         res: Response, 
-        action: 'unlock' | 'lock' | 'start' | 'stop'
+        action: 'unlock' | 'lock' | 'start' | 'stop' | 'door_open' | 'door_close'
     ): Promise<void> => {
         try {
             const userId = req.user?.id;
@@ -320,21 +437,52 @@ class VehicleController {
             const status = await this.vehicleService.getVehicleStatus(vehicleId);
             const isConnected = await this.vehicleService.isVehicleConnected(vehicleId);
 
+            // Enhanced status response with detailed information
             res.status(200).json({
                 vehicle_id: vehicleId,
-                status: status,
-                is_connected: isConnected,
                 vehicle_info: {
                     vin: vehicle.vin,
                     model: vehicle.model,
                     status: vehicle.status
-                }
+                },
+                connection: {
+                    is_connected: isConnected,
+                    last_seen: status?.last_update || null
+                },
+                door_status: {
+                    is_locked: status?.door_locked ?? null,
+                    is_open: status?.door_open ?? null,
+                    lock_status: status?.door_locked ? 'locked' : 'unlocked',
+                    door_status: status?.door_open ? 'open' : 'closed'
+                },
+                engine_status: {
+                    is_running: status?.engine_running ?? null,
+                    engine_status: status?.engine_running ? 'running' : 'stopped'
+                },
+                battery: {
+                    level: status?.battery_level ?? null,
+                    status: this.getBatteryStatus(status?.battery_level)
+                },
+                location: {
+                    latitude: status?.latitude ?? null,
+                    longitude: status?.longitude ?? null,
+                    last_updated: status?.location_updated ?? null
+                },
+                raw_status: status
             });
         } catch (error) {
             console.error('Get vehicle status error:', error);
             res.status(500).json({ error: 'Failed to get vehicle status' });
         }
     };
+
+    private getBatteryStatus(level: number | null | undefined): string {
+        if (level === null || level === undefined) return 'unknown';
+        if (level > 75) return 'good';
+        if (level > 50) return 'fair';
+        if (level > 25) return 'low';
+        return 'critical';
+    }
 
     getLogs = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
