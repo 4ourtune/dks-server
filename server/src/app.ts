@@ -230,7 +230,6 @@ class App {
                 `🚗 Digital Key System Server`,
                 '='.repeat(60),
                 `🚀 Server running on port ${port}`,
-                '🌐 External API access: http://34.46.208.174:3000/',
                 `📊 Environment: ${process.env.NODE_ENV || 'development'}`,
                 `🔗 Database: PostgreSQL (${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME})`,
                 `📋 Logs: ${this.logger.getLogStats().logDirectory}`,
