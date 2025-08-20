@@ -76,7 +76,7 @@ pipeline {
                     echo "Checking API service readiness..."
                     API_READY=false
                     for i in {1..30}; do
-                        if docker-compose ps api | grep -q "Up" && curl -f -s http://localhost:3000/health > /dev/null 2>&1; then
+                        if docker-compose ps api | grep -q "Up" && curl -f -s http://34.46.208.174:3000/health > /dev/null 2>&1; then
                             echo "API service is ready!"
                             API_READY=true
                             break
