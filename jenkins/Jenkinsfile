@@ -33,15 +33,13 @@ pipeline {
                 echo "Building and starting development services..."
                 
                 sh '''
-                    # 기존 컨테이너 정리
                     cd docker
-                    docker-compose down -v || true
                     
-                    # Docker 빌드 캐시 정리
-                    docker system prune -f
+                    # 기존 컨테이너만 중지 (볼륨 유지로 빠른 재시작)
+                    docker-compose down || true
                     
-                    # 서비스 빌드 및 시작
-                    echo "Building and starting all services..."
+                    # 서비스 빌드 및 시작 (캐시 활용)
+                    echo "Starting services..."
                     docker-compose up -d --build
                 '''
             }
@@ -78,7 +76,7 @@ pipeline {
                     echo "Checking API service readiness..."
                     API_READY=false
                     for i in {1..30}; do
-                        if docker-compose ps api | grep -q "Up" && docker-compose exec -T api curl -f -s http://localhost:3000/health > /dev/null 2>&1; then
+                        if docker-compose ps api | grep -q "Up" && curl -f -s http://localhost:3000/health > /dev/null 2>&1; then
                             echo "API service is ready!"
                             API_READY=true
                             break
@@ -110,7 +108,10 @@ pipeline {
             slackSend(
                 channel: env.SLACK_CHANNEL,
                 color: 'good',
-                message: "API Dev Server BUILD SUCCESS\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}"
+                message: """API Dev Server BUILD SUCCESS
+Build: ${BUILD_NUMBER}
+Branch: ${GIT_BRANCH}
+Commit: ${GIT_COMMIT.take(7)}"""
             )
         }
         
@@ -127,7 +128,11 @@ pipeline {
             slackSend(
                 channel: env.SLACK_CHANNEL,
                 color: 'danger',
-                message: "API Dev Server BUILD FAILED\\nBuild: ${BUILD_NUMBER}\\nBranch: ${GIT_BRANCH}\\nCommit: ${GIT_COMMIT.take(7)}\\nCheck: ${BUILD_URL}"
+                message: """API Dev Server BUILD FAILED
+Build: ${BUILD_NUMBER}
+Branch: ${GIT_BRANCH}
+Commit: ${GIT_COMMIT.take(7)}
+Check: ${BUILD_URL}"""
             )
         }
         
