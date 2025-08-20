@@ -2,7 +2,7 @@ pipeline {
     agent any
     
     environment {
-        SLACK_CHANNEL = '#젠킨스'
+        SLACK_CHANNEL = '#jenkins'
     }
     
     options {
@@ -24,12 +24,6 @@ pipeline {
                 sh '''
                     echo "Git Information:"
                     git log --oneline -1
-                    echo "Current directory structure:"
-                    ls -la
-                    echo "Server directory:"
-                    ls -la server/
-                    echo "Database directory:"
-                    ls -la database/
                 '''
             }
         }
@@ -46,32 +40,9 @@ pipeline {
                     # Docker 빌드 캐시 정리
                     docker system prune -f
                     
-                    # 데이터베이스 파일 존재 여부 확인
-                    echo "Checking database files from docker directory:"
-                    ls -la ../database/
-                    echo "Checking if postgres-schema.sql exists:"
-                    if [ -f "../database/postgres-schema.sql" ]; then
-                        echo "✅ postgres-schema.sql found"
-                        head -5 ../database/postgres-schema.sql
-                    else
-                        echo "❌ postgres-schema.sql NOT found"
-                        exit 1
-                    fi
-                    
-                    if [ -f "../database/seed-data.sql" ]; then
-                        echo "✅ seed-data.sql found"
-                    else
-                        echo "❌ seed-data.sql NOT found"
-                        exit 1
-                    fi
-                    
                     # 서비스 빌드 및 시작
                     echo "Building and starting all services..."
                     docker-compose up -d --build
-                    
-                    # 서비스 상태 확인
-                    echo "Service status:"
-                    docker-compose ps
                 '''
             }
         }
@@ -86,11 +57,10 @@ pipeline {
                     POSTGRES_READY=false
                     for i in {1..25}; do
                         if docker-compose ps postgres | grep -q "Up.*healthy" && docker-compose exec -T postgres pg_isready -U postgres -d digital_key_system > /dev/null 2>&1; then
-                            echo "PostgreSQL is ready! (attempt $i)"
+                            echo "PostgreSQL is ready!"
                             POSTGRES_READY=true
                             break
                         fi
-                        echo "PostgreSQL not ready yet... ($i/25)"
                         sleep 1
                     done
                     
@@ -109,11 +79,10 @@ pipeline {
                     API_READY=false
                     for i in {1..30}; do
                         if docker-compose ps api | grep -q "Up" && docker-compose exec -T api curl -f -s http://localhost:3000/health > /dev/null 2>&1; then
-                            echo "API service is ready! (attempt $i)"
+                            echo "API service is ready!"
                             API_READY=true
                             break
                         fi
-                        echo "API service not ready yet... ($i/30)"
                         sleep 1
                     done
                     
@@ -127,10 +96,8 @@ pipeline {
                     fi
                     
                     # 성공 시 최종 상태 출력
-                    echo "✅ All services are ready!"
+                    echo "All services are ready!"
                     docker-compose ps
-                    echo "API health response:"
-                    docker-compose exec -T api curl -s http://localhost:3000/health
                 '''
             }
         }
@@ -166,7 +133,6 @@ pipeline {
         
         always {
             sh '''
-                echo "Cleaning up build cache..."
                 docker system prune -f || true
             '''
         }
