@@ -32,18 +32,15 @@ export interface DigitalKey {
 
 export interface KeyPermissions {
     unlock: boolean;
-    start: boolean;
-    trunk: boolean;
-    lock?: boolean;
-    door_open?: boolean;
-    door_close?: boolean;
+    lock: boolean;
+    engine_on: boolean;
 }
 
 export interface AccessLog {
     id?: number;
     user_id: number;
     vehicle_id: number;
-    action: 'unlock' | 'lock' | 'start' | 'stop' | 'door_open' | 'door_close' | 'status_check';
+    action: 'unlock' | 'lock' | 'engine_on' | 'status_check';
     result: 'success' | 'failure' | 'timeout';
     error_message?: string;
     ip_address?: string;
@@ -75,7 +72,7 @@ export interface VehicleStatus {
 }
 
 export interface VehicleCommand {
-    action: 'unlock' | 'lock' | 'start' | 'stop' | 'door_open' | 'door_close';
+    action: 'unlock' | 'lock' | 'engine_on';
     user_id: number;
     vehicle_id: number;
     key_id: number;
@@ -88,7 +85,7 @@ export interface SocketEvent {
     'vehicle:status_update': { vehicle_id: number; status: VehicleStatus };
     'vehicle:command_result': { 
         vehicle_id: number; 
-        action: 'unlock' | 'lock' | 'start' | 'stop' | 'door_open' | 'door_close'; 
+        action: 'unlock' | 'lock' | 'engine_on'; 
         result: 'success' | 'failure' | 'timeout';
         error_message?: string;
     };

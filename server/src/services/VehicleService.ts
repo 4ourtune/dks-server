@@ -153,7 +153,7 @@ class VehicleService {
 
     async executeVehicleCommand(
         vehicleId: number,
-        command: 'unlock' | 'lock' | 'start' | 'stop'
+        command: 'unlock' | 'lock' | 'engine_on'
     ): Promise<{ success: boolean; message: string }> {
         const vehicle = await this.vehicleModel.findById(vehicleId);
         if (!vehicle) {
@@ -186,16 +186,14 @@ class VehicleService {
     private applyCommand(currentStatus: VehicleStatus, command: string): Partial<VehicleStatus> {
         switch (command) {
             case 'unlock':
-                return { locked: false };
+                return { locked: false, door_locked: false };
             case 'lock':
-                return { locked: true };
-            case 'start':
-                if (currentStatus.locked) {
+                return { locked: true, door_locked: true };
+            case 'engine_on':
+                if (currentStatus.locked || currentStatus.door_locked) {
                     throw new Error('Cannot start engine while vehicle is locked');
                 }
                 return { engine_running: true };
-            case 'stop':
-                return { engine_running: false };
             default:
                 throw new Error(`Unknown command: ${command}`);
         }
@@ -252,12 +250,12 @@ class VehicleService {
         const issues: string[] = [];
         const recommendations: string[] = [];
 
-        if (status.battery_level < 20) {
+        if (status.battery_level !== undefined && status.battery_level < 20) {
             issues.push('Low battery level');
             recommendations.push('Charge vehicle battery');
         }
 
-        if (status.battery_level < 50) {
+        if (status.battery_level !== undefined && status.battery_level < 50) {
             recommendations.push('Consider charging battery soon');
         }
 

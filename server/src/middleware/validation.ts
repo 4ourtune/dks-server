@@ -67,7 +67,7 @@ export const digitalKeySchema = z.object({
 
 export const vehicleCommandSchema = z.object({
     body: z.object({
-        action: z.enum(['unlock', 'lock', 'start', 'stop']),
+        action: z.enum(['unlock', 'lock', 'engine_on']),
         key_id: z.number().positive('Invalid key ID')
     }),
     params: z.object({

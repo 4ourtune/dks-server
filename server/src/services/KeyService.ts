@@ -107,7 +107,7 @@ class KeyService {
         userId: number,
         vehicleId: number,
         keyId: number,
-        action: 'unlock' | 'lock' | 'start' | 'stop',
+        action: 'unlock' | 'lock' | 'engine_on',
         ipAddress?: string,
         userAgent?: string
     ): Promise<{ success: boolean; message: string }> {
@@ -144,11 +144,11 @@ class KeyService {
     private mapActionToPermission(action: string): keyof KeyPermissions {
         switch (action) {
             case 'unlock':
-            case 'lock':
                 return 'unlock';
-            case 'start':
-            case 'stop':
-                return 'start';
+            case 'lock':
+                return 'lock';
+            case 'engine_on':
+                return 'engine_on';
             default:
                 throw new Error(`Unknown action: ${action}`);
         }
@@ -202,7 +202,7 @@ class KeyService {
     private async logAccess(
         userId: number,
         vehicleId: number,
-        action: 'unlock' | 'lock' | 'start' | 'stop',
+        action: 'unlock' | 'lock' | 'engine_on',
         result: 'success' | 'failure' | 'timeout',
         errorMessage?: string,
         ipAddress?: string,

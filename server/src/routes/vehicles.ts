@@ -87,36 +87,12 @@ router.post('/:vehicleId/lock',
     vehicleController.lock
 );
 
-router.post('/:vehicleId/door/open', 
+router.post('/:vehicleId/engine_on', 
     authenticateToken,
     vehicleCommandRateLimit,
     validate(vehicleCommandSchema),
     requireVehicleAccess,
-    vehicleController.openDoor
-);
-
-router.post('/:vehicleId/door/close', 
-    authenticateToken,
-    vehicleCommandRateLimit,
-    validate(vehicleCommandSchema),
-    requireVehicleAccess,
-    vehicleController.closeDoor
-);
-
-router.post('/:vehicleId/start', 
-    authenticateToken,
-    vehicleCommandRateLimit,
-    validate(vehicleCommandSchema),
-    requireVehicleAccess,
-    vehicleController.start
-);
-
-router.post('/:vehicleId/stop', 
-    authenticateToken,
-    vehicleCommandRateLimit,
-    validate(vehicleCommandSchema),
-    requireVehicleAccess,
-    vehicleController.stop
+    vehicleController.engineOn
 );
 
 router.get('/:vehicleId/status', 

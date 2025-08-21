@@ -34,7 +34,7 @@ class VehicleController {
                 status
             });
 
-            this.logger.vehicle('system_register', { vehicleId: vehicle.id!, adminUserId: userId, success: true });
+            this.logger.vehicle('system_register', { vehicleId: vehicle.id!, userId, success: true });
 
             res.status(201).json({
                 message: 'Vehicle registered in system successfully',
@@ -89,13 +89,15 @@ class VehicleController {
             });
 
             // Create a digital key for the user
-            await this.keyService.registerKey({
-                vehicle_id: vehicleId,
-                user_id: userId,
-                key_name: `${vehicle.model} - Owner Key`,
-                permissions: ['unlock', 'lock', 'start', 'stop', 'door_open', 'door_close'],
-                is_active: true
-            });
+            await this.keyService.createDigitalKey(
+                userId,
+                vehicleId,
+                {
+                    unlock: true,
+                    lock: true,
+                    engine_on: true
+                }
+            );
 
             this.logger.vehicle('user_register', { vehicleId, userId, success: true });
 
@@ -112,7 +114,7 @@ class VehicleController {
         } catch (error) {
             this.logger.error('User vehicle registration error', error, { 
                 userId: req.user?.id,
-                vehicleId: req.params.vehicleId 
+                vehicleId: parseInt(req.params.vehicleId) 
             });
             
             if (error instanceof Error) {
@@ -341,26 +343,14 @@ class VehicleController {
         await this.executeVehicleCommand(req, res, 'lock');
     };
 
-    start = async (req: AuthRequest, res: Response): Promise<void> => {
-        await this.executeVehicleCommand(req, res, 'start');
-    };
-
-    stop = async (req: AuthRequest, res: Response): Promise<void> => {
-        await this.executeVehicleCommand(req, res, 'stop');
-    };
-
-    openDoor = async (req: AuthRequest, res: Response): Promise<void> => {
-        await this.executeVehicleCommand(req, res, 'door_open');
-    };
-
-    closeDoor = async (req: AuthRequest, res: Response): Promise<void> => {
-        await this.executeVehicleCommand(req, res, 'door_close');
+    engineOn = async (req: AuthRequest, res: Response): Promise<void> => {
+        await this.executeVehicleCommand(req, res, 'engine_on');
     };
 
     private executeVehicleCommand = async (
         req: AuthRequest, 
         res: Response, 
-        action: 'unlock' | 'lock' | 'start' | 'stop' | 'door_open' | 'door_close'
+        action: 'unlock' | 'lock' | 'engine_on'
     ): Promise<void> => {
         try {
             const userId = req.user?.id;
