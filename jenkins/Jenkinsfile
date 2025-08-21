@@ -5,8 +5,10 @@ pipeline {
         SLACK_CHANNEL = '#jenkins'
         API_PORT = '3000'
         SERVER_IP = '34.46.208.174'
-        POSTGRES_HEALTH_TIMEOUT = '25'
-        API_STARTUP_WAIT = '5'
+        POSTGRES_HEALTH_TIMEOUT = '30'
+        API_STARTUP_WAIT = '10'
+        API_HEALTH_TIMEOUT = '60'
+        API_HEALTH_RETRIES = '30'
     }
     
     options {
@@ -36,7 +38,7 @@ pipeline {
             }
         }
         
-        stage('Check') {
+        stage('Health Check') {
             steps {
                 echo "Checking service health..."
                 sh '''
@@ -48,6 +50,10 @@ pipeline {
                             echo "PostgreSQL ready!"
                             break
                         fi
+                        if [ $i -eq ${POSTGRES_HEALTH_TIMEOUT} ]; then
+                            echo "PostgreSQL health check failed after ${POSTGRES_HEALTH_TIMEOUT} seconds"
+                            exit 1
+                        fi
                         sleep 1
                     done
                     
@@ -55,9 +61,82 @@ pipeline {
                     docker-compose up -d api
                     sleep ${API_STARTUP_WAIT}
                     
+                    echo "Checking API container status..."
+                    API_STATUS=$(docker-compose ps api --format "{{.State}}")
+                    if [ "$API_STATUS" != "running" ]; then
+                        echo "API container is not running. Status: $API_STATUS"
+                        echo "API logs:"
+                        docker-compose logs api --tail 50
+                        exit 1
+                    fi
+                    
+                    echo "Testing API health endpoint..."
+                    for i in {1..${API_HEALTH_RETRIES}}; do
+                        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${API_PORT}/health || echo "000")
+                        if [ "$HTTP_CODE" = "200" ]; then
+                            echo "API health check passed!"
+                            break
+                        elif [ "$HTTP_CODE" = "503" ]; then
+                            echo "API is running but unhealthy (503). Attempt $i/${API_HEALTH_RETRIES}"
+                        else
+                            echo "API health check failed. HTTP Code: $HTTP_CODE. Attempt $i/${API_HEALTH_RETRIES}"
+                        fi
+                        
+                        if [ $i -eq ${API_HEALTH_RETRIES} ]; then
+                            echo "API health check failed after ${API_HEALTH_RETRIES} attempts"
+                            echo "API logs:"
+                            docker-compose logs api --tail 50
+                            echo "API status:"
+                            curl -v http://localhost:${API_PORT}/health || true
+                            exit 1
+                        fi
+                        sleep 2
+                    done
+                    
                     echo "Services status:"
                     docker-compose ps
                     echo "API accessible at: http://${SERVER_IP}:${API_PORT}/health"
+                '''
+            }
+        }
+        
+        stage('API Tests') {
+            steps {
+                echo "Running API integration tests..."
+                sh '''
+                    cd docker
+                    
+                    echo "Testing basic API endpoints..."
+                    
+                    # Test root endpoint
+                    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${API_PORT}/ || echo "000")
+                    if [ "$HTTP_CODE" != "200" ]; then
+                        echo "Root endpoint test failed. HTTP Code: $HTTP_CODE"
+                        exit 1
+                    fi
+                    echo "✓ Root endpoint test passed"
+                    
+                    # Test health endpoint with detailed response
+                    HEALTH_RESPONSE=$(curl -s http://localhost:${API_PORT}/health || echo "ERROR")
+                    if [ "$HEALTH_RESPONSE" = "ERROR" ]; then
+                        echo "Health endpoint is not accessible"
+                        exit 1
+                    fi
+                    
+                    # Check if health response contains expected fields
+                    echo "$HEALTH_RESPONSE" | grep -q "status" || { echo "Health response missing status field"; exit 1; }
+                    echo "$HEALTH_RESPONSE" | grep -q "database" || { echo "Health response missing database field"; exit 1; }
+                    echo "✓ Health endpoint test passed"
+                    
+                    # Test status endpoint
+                    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${API_PORT}/api/status || echo "000")
+                    if [ "$HTTP_CODE" != "200" ]; then
+                        echo "Status endpoint test failed. HTTP Code: $HTTP_CODE"
+                        exit 1
+                    fi
+                    echo "✓ Status endpoint test passed"
+                    
+                    echo "All API tests passed!"
                 '''
             }
         }
@@ -76,11 +155,21 @@ pipeline {
         
         failure {
             echo "Build failed"
-            sh 'cd docker && docker-compose logs --tail 20'
+            sh '''
+                cd docker
+                echo "=== CONTAINER STATUS ==="
+                docker-compose ps
+                echo "=== API LOGS ==="
+                docker-compose logs api --tail 50 || true
+                echo "=== POSTGRES LOGS ==="
+                docker-compose logs postgres --tail 20 || true
+                echo "=== DOCKER SYSTEM INFO ==="
+                docker system df || true
+            '''
             slackSend(
                 channel: env.SLACK_CHANNEL,
                 color: 'danger',
-                message: "BUILD FAILED\nBuild: #${BUILD_NUMBER}\nBranch: ${GIT_BRANCH}\nCommit: ${GIT_COMMIT.take(7)}\nURL: ${BUILD_URL}"
+                message: "BUILD FAILED\nBuild: #${BUILD_NUMBER}\nBranch: ${GIT_BRANCH}\nCommit: ${GIT_COMMIT.take(7)}\nURL: ${BUILD_URL}\nCheck logs for details"
             )
         }
         
