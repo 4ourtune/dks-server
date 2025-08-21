@@ -63,10 +63,9 @@ pipeline {
                     sleep ${API_STARTUP_WAIT}
                     
                     echo "Checking API container status and logs..."
-                    API_STATUS=$(docker-compose ps api --format "{{.State}}" 2>/dev/null || echo "not_found")
-                    
-                    if [ "$API_STATUS" != "running" ]; then
-                        echo "API container failed to start. Status: $API_STATUS"
+                    # Check if API container exists and is running
+                    if ! docker-compose ps api | grep -q "Up"; then
+                        echo "API container is not running"
                         echo "=== API LOGS ==="
                         docker-compose logs api --tail 100
                         echo "=== CONTAINER STATUS ==="
