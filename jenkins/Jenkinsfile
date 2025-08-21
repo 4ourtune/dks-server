@@ -81,7 +81,7 @@ pipeline {
                     RECENT_LOGS=$(docker-compose logs api --tail 50 2>/dev/null || echo "no_logs")
                     
                     # Check for common error patterns
-                    if echo "$RECENT_LOGS" | grep -i "error\|failed\|exception\|crash" | grep -v "graceful"; then
+                    if echo "$RECENT_LOGS" | grep -i "error\\|failed\\|exception\\|crash" | grep -v "graceful"; then
                         echo "Errors detected in API logs:"
                         echo "$RECENT_LOGS"
                         exit 1
