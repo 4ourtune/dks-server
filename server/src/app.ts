@@ -8,10 +8,12 @@ import dotenv from 'dotenv';
 import Database from './database/connection';
 import SocketService from './services/SocketService';
 import LoggerService from './services/LoggerService';
+import CertificateController from './controllers/CertificateController';
 
 import authRoutes from './routes/auth';
 import keysRoutes from './routes/keys';
 import vehiclesRoutes from './routes/vehicles';
+import certificateRoutes from './routes/certificates';
 
 import { errorHandler } from './middleware/validation';
 
@@ -24,6 +26,7 @@ class App {
     private socketService: SocketService;
     private database: Database;
     private logger: LoggerService;
+    private certificateController: CertificateController;
 
     constructor() {
         this.app = express();
@@ -39,10 +42,12 @@ class App {
         this.database = Database.getInstance();
         this.socketService = new SocketService(this.io);
         this.logger = LoggerService.getInstance();
+        this.certificateController = new CertificateController();
 
         this.setupMiddleware();
         this.setupRoutes();
         this.setupErrorHandling();
+        this.initializeCertificateAuthority();
         this.startPeriodicTasks();
     }
 
@@ -122,6 +127,7 @@ class App {
         this.app.use('/api/auth', authRoutes);
         this.app.use('/api/keys', keysRoutes);
         this.app.use('/api/vehicles', vehiclesRoutes);
+        this.app.use('/api/certificates', certificateRoutes);
 
         this.app.get('/api/status', (req, res) => {
             const logStats = this.logger.getLogStats();
@@ -181,6 +187,16 @@ class App {
         });
     }
 
+    private async initializeCertificateAuthority(): Promise<void> {
+        try {
+            await this.certificateController.initialize();
+            this.logger.server('Certificate Authority initialized successfully');
+        } catch (error) {
+            this.logger.error('Failed to initialize Certificate Authority', error);
+            throw error;
+        }
+    }
+
     private startPeriodicTasks(): void {
         this.socketService.startPeriodicUpdates(30000);
 
@@ -195,6 +211,21 @@ class App {
                 }
             } catch (error) {
                 this.logger.error('Error during key cleanup', error);
+            }
+        }, 60 * 60 * 1000);
+
+        setInterval(async () => {
+            try {
+                const CertificateAuthorityService = (await import('./services/CertificateAuthorityService')).default;
+                const caService = new CertificateAuthorityService();
+                await caService.initializeRootCA();
+                const cleanedCertificates = await caService.cleanupExpiredCertificates();
+                
+                if (cleanedCertificates > 0) {
+                    this.logger.server(`Cleaned up ${cleanedCertificates} expired certificates`);
+                }
+            } catch (error) {
+                this.logger.error('Error during certificate cleanup', error);
             }
         }, 60 * 60 * 1000);
 
@@ -251,6 +282,11 @@ class App {
                 `   - POST /api/vehicles/:id/lock (Lock vehicle)`,
                 `   - POST /api/vehicles/:id/engine_on (Start engine)`,
                 `   - GET  /api/vehicles/:id/status (Vehicle status)`,
+                `   - POST /api/certificates/vehicle (Issue vehicle certificate)`,
+                `   - POST /api/certificates/digital-key (Issue digital key certificate)`,
+                `   - POST /api/certificates/verify (Verify certificate)`,
+                `   - GET  /api/certificates/root-ca/public-key (Root CA public key)`,
+                `   - GET  /api/certificates/crl (Certificate revocation list)`,
                 `🔌 WebSocket events:`,
                 `   - vehicle:connect         (TC375 connection)`,
                 `   - vehicle:command         (Vehicle commands)`,

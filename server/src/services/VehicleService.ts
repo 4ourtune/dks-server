@@ -284,6 +284,20 @@ class VehicleService {
         const status = enabled ? 'maintenance' : 'active';
         return await this.vehicleModel.update(vehicleId, { status });
     }
+
+    async hasVehicleAccess(userId: number, vehicleId: number): Promise<boolean> {
+        const vehicle = await this.vehicleModel.findById(vehicleId);
+        if (!vehicle) {
+            return false;
+        }
+
+        if (vehicle.owner_id === userId) {
+            return true;
+        }
+
+        const userKeys = await this.digitalKeyModel.findByUserAndVehicle(userId, vehicleId);
+        return userKeys !== null && userKeys.is_active;
+    }
 }
 
 export default VehicleService;

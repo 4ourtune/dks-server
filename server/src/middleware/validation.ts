@@ -173,3 +173,81 @@ export const errorHandler = (error: Error, req: Request, res: Response, next: Ne
         message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
     });
 };
+
+export const certificateValidationSchemas = {
+    vehicleCertificateSchema: z.object({
+        body: z.object({
+            vehicleId: z.number().positive('Invalid vehicle ID'),
+            tc375Serial: z.string().min(1, 'TC375 serial is required').max(32, 'Serial too long'),
+            manufacturer: z.string().max(50, 'Manufacturer name too long').optional(),
+            model: z.string().max(100, 'Model name too long').optional(),
+            validityDays: z.number().positive('Validity days must be positive').max(3650, 'Maximum validity is 10 years').optional()
+        })
+    }),
+
+    digitalKeyCertificateSchema: z.object({
+        body: z.object({
+            vehicleId: z.number().positive('Invalid vehicle ID'),
+            permissions: z.object({
+                unlock: z.boolean(),
+                lock: z.boolean(),
+                engine_on: z.boolean()
+            }),
+            validityDays: z.number().positive('Validity days must be positive').max(365, 'Maximum validity is 1 year').optional()
+        })
+    }),
+
+    certificateVerificationSchema: z.object({
+        body: z.object({
+            certificate: z.object({
+                version: z.string(),
+                serialNumber: z.string(),
+                issuer: z.string(),
+                subject: z.object({}).passthrough(),
+                publicKey: z.string(),
+                validFrom: z.string(),
+                validTo: z.string(),
+                signature: z.string()
+            })
+        })
+    }),
+
+    serialNumberParamSchema: z.object({
+        params: z.object({
+            serialNumber: z.string().min(1, 'Serial number is required').max(64, 'Serial number too long')
+        })
+    }),
+
+    vehicleIdParamSchema: z.object({
+        params: z.object({
+            vehicleId: z.string().regex(/^\d+$/, 'Vehicle ID must be a number')
+        })
+    }),
+
+    revokeCertificateSchema: z.object({
+        body: z.object({
+            reason: z.string().max(100, 'Reason too long').optional()
+        }),
+        params: z.object({
+            serialNumber: z.string().min(1, 'Serial number is required').max(64, 'Serial number too long')
+        })
+    }),
+
+    renewCertificateSchema: z.object({
+        body: z.object({
+            validityDays: z.number().positive('Validity days must be positive').max(3650, 'Maximum validity is 10 years').optional()
+        }),
+        params: z.object({
+            serialNumber: z.string().min(1, 'Serial number is required').max(64, 'Serial number too long')
+        })
+    }),
+
+    exportCertificateSchema: z.object({
+        params: z.object({
+            serialNumber: z.string().min(1, 'Serial number is required').max(64, 'Serial number too long')
+        }),
+        query: z.object({
+            format: z.enum(['json', 'pem']).optional()
+        })
+    })
+};

@@ -13,12 +13,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@types/elliptic": "^6.4.18",
+    "@types/node-forge": "^1.3.14",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
+    "elliptic": "^6.6.1",
     "express": "^4.18.2",
     "helmet": "^7.0.0",
     "jsonwebtoken": "^9.0.0",
+    "node-forge": "^1.3.1",
     "pg": "^8.11.0",
     "socket.io": "^4.7.0",
     "typescript": "^5.0.0",

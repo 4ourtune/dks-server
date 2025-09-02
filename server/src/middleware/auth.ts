@@ -8,6 +8,7 @@ interface AuthRequest extends Request {
         email: string;
         name: string;
     };
+    userId?: number;
 }
 
 const userModel = new UserModel();
@@ -40,6 +41,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             email: user.email,
             name: user.name
         };
+        req.userId = user.id!;
 
         next();
     } catch (error) {

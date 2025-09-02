@@ -80,3 +80,49 @@ CREATE TRIGGER update_vehicles_updated_at BEFORE UPDATE ON vehicles
 
 CREATE TRIGGER update_digital_keys_updated_at BEFORE UPDATE ON digital_keys
     FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
+-- PKI Certificate Management Tables
+
+-- Root CA keys storage
+CREATE TABLE root_ca_keys (
+    id SERIAL PRIMARY KEY,
+    key_id VARCHAR(64) UNIQUE NOT NULL,
+    private_key_encrypted TEXT NOT NULL,
+    public_key TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT true
+);
+
+-- Certificates table
+CREATE TABLE certificates (
+    id SERIAL PRIMARY KEY,
+    serial_number VARCHAR(64) UNIQUE NOT NULL,
+    type VARCHAR(20) NOT NULL CHECK (type IN ('vehicle', 'digital_key')),
+    subject_id INTEGER NOT NULL,
+    public_key TEXT NOT NULL,
+    certificate_data JSONB NOT NULL,
+    issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP NULL,
+    revocation_reason VARCHAR(100) NULL,
+    is_active BOOLEAN DEFAULT true
+);
+
+-- Certificate revocation list
+CREATE TABLE certificate_revocation_list (
+    id SERIAL PRIMARY KEY,
+    certificate_serial VARCHAR(64) NOT NULL,
+    revoked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    reason VARCHAR(100) NOT NULL
+);
+
+-- PKI Indexes
+CREATE INDEX idx_certificates_serial_number ON certificates(serial_number);
+CREATE INDEX idx_certificates_type ON certificates(type);
+CREATE INDEX idx_certificates_subject_id ON certificates(subject_id);
+CREATE INDEX idx_certificates_active ON certificates(is_active) WHERE is_active = true;
+CREATE INDEX idx_certificates_expires_at ON certificates(expires_at);
+CREATE INDEX idx_certificates_revoked_at ON certificates(revoked_at) WHERE revoked_at IS NOT NULL;
+CREATE INDEX idx_root_ca_keys_active ON root_ca_keys(is_active) WHERE is_active = true;
+CREATE INDEX idx_crl_certificate_serial ON certificate_revocation_list(certificate_serial);
+CREATE INDEX idx_crl_revoked_at ON certificate_revocation_list(revoked_at);

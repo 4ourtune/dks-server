@@ -91,3 +91,72 @@ export interface SocketEvent {
     };
     'vehicle:error': { vehicle_id: number; error: string };
 }
+
+export interface Certificate {
+    id?: number;
+    serialNumber: string;
+    type: 'vehicle' | 'digital_key';
+    subjectId: number;
+    publicKey: string;
+    certificateData: CertificateData;
+    issuedAt?: string;
+    expiresAt: string;
+    revokedAt?: string;
+    revocationReason?: string;
+    isActive: boolean;
+}
+
+export interface CertificateData {
+    version: string;
+    serialNumber: string;
+    issuer: string;
+    subject: CertificateSubject;
+    publicKey: string;
+    validFrom: string;
+    validTo: string;
+    signature: string;
+}
+
+export interface CertificateSubject {
+    vehicleId?: number;
+    tc375Serial?: string;
+    manufacturer?: string;
+    model?: string;
+    userId?: number;
+    keyId?: string;
+}
+
+export interface VehicleCertificate extends CertificateData {
+    subject: {
+        vehicleId: number;
+        tc375Serial: string;
+        manufacturer: string;
+        model: string;
+    };
+    capabilities: ('unlock' | 'lock' | 'engine_on')[];
+}
+
+export interface DigitalKeyCertificate extends CertificateData {
+    subject: {
+        userId: number;
+        keyId: string;
+    };
+    permissions: KeyPermissions;
+    allowedVehicles: number[];
+}
+
+export interface RootCAKeys {
+    id?: number;
+    keyId: string;
+    privateKeyEncrypted: string;
+    publicKey: string;
+    createdAt?: string;
+    isActive: boolean;
+}
+
+export interface CertificateRevocationEntry {
+    id?: number;
+    certificateSerial: string;
+    revokedAt?: string;
+    reason: string;
+}
