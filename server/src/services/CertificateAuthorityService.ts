@@ -1,4 +1,5 @@
 import ECCCryptoService from './ECCCryptoService';
+import CryptoService from './CryptoService';
 import CertificateModel from '../models/Certificate';
 import { 
     Certificate, 
@@ -53,7 +54,9 @@ class CertificateAuthorityService {
 
     private encryptRootCAPrivateKey(privateKey: string): string {
         const masterPassword = process.env.ROOT_CA_PASSWORD || 'default_ca_password';
-        return ECCCryptoService.encrypt(privateKey, ECCCryptoService.hashData(masterPassword)).encryptedData;
+        const keyHash = ECCCryptoService.hashData(masterPassword);
+        const encryptionResult = CryptoService.encrypt(privateKey, keyHash);
+        return JSON.stringify(encryptionResult);
     }
 
     private decryptRootCAPrivateKey(encryptedPrivateKey: string): string {
@@ -61,7 +64,8 @@ class CertificateAuthorityService {
         const keyHash = ECCCryptoService.hashData(masterPassword);
         
         try {
-            return ECCCryptoService.decrypt(encryptedPrivateKey, keyHash, '', '');
+            const encryptionData = JSON.parse(encryptedPrivateKey);
+            return CryptoService.decrypt(encryptionData.encryptedData, keyHash, encryptionData.iv, encryptionData.tag);
         } catch (error) {
             throw new Error('Failed to decrypt Root CA private key');
         }

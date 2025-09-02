@@ -5,7 +5,7 @@ import CryptoService from './CryptoService';
 import { CertificateData, VehicleCertificate, DigitalKeyCertificate, KeyPermissions } from '../types';
 
 class ECCCryptoService extends CryptoService {
-    private static ec = new EC.ec('secp256r1');
+    private static ec = new EC.ec('p256');
 
     static generateECKeyPair(): { publicKey: string; privateKey: string } {
         const keyPair = this.ec.genKeyPair();

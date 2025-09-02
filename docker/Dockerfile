@@ -25,5 +25,5 @@ RUN mkdir -p logs
 # Expose port
 EXPOSE 3000
 
-# Start development server
-CMD ["npm", "run", "dev"]
+# Start development server with database initialization
+CMD ["npm", "run", "start:docker"]

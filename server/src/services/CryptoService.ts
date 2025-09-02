@@ -19,11 +19,19 @@ class CryptoService {
         tag: string;
     } {
         try {
-            const keyBuffer = Buffer.from(key, 'hex');
+            // Convert key to proper 32-byte buffer, padding if necessary
+            let keyBuffer: Buffer;
+            if (key.length === 64) {
+                // Assume it's already hex
+                keyBuffer = Buffer.from(key, 'hex');
+            } else {
+                // Hash the key to get consistent 32-byte key
+                keyBuffer = crypto.createHash('sha256').update(key).digest();
+            }
+            
             const iv = this.generateIV();
             
-            const cipher = crypto.createCipher(this.algorithm, keyBuffer);
-            cipher.setAutoPadding(true);
+            const cipher = crypto.createCipheriv(this.algorithm, keyBuffer, iv);
             
             let encrypted = cipher.update(data, 'utf8', 'hex');
             encrypted += cipher.final('hex');
@@ -40,15 +48,25 @@ class CryptoService {
 
     static decrypt(encryptedData: string, key: string, iv: string, tag: string): string {
         try {
-            const keyBuffer = Buffer.from(key, 'hex');
-            const expectedTag = crypto.createHash('sha256').update(encryptedData + iv).digest('hex');
-            
-            if (expectedTag !== tag) {
-                throw new Error('Invalid tag');
+            // Convert key to proper 32-byte buffer, same as encrypt
+            let keyBuffer: Buffer;
+            if (key.length === 64) {
+                // Assume it's already hex
+                keyBuffer = Buffer.from(key, 'hex');
+            } else {
+                // Hash the key to get consistent 32-byte key
+                keyBuffer = crypto.createHash('sha256').update(key).digest();
             }
             
-            const decipher = crypto.createDecipher(this.algorithm, keyBuffer);
-            decipher.setAutoPadding(true);
+            if (tag) {
+                const expectedTag = crypto.createHash('sha256').update(encryptedData + iv).digest('hex');
+                if (expectedTag !== tag) {
+                    throw new Error('Invalid tag');
+                }
+            }
+            
+            const ivBuffer = Buffer.from(iv, 'hex');
+            const decipher = crypto.createDecipheriv(this.algorithm, keyBuffer, ivBuffer);
             
             let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
             decrypted += decipher.final('utf8');
