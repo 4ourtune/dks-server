@@ -11,7 +11,7 @@ class CertificateModel {
     async create(certificate: Certificate): Promise<Certificate> {
         const query = `
             INSERT INTO certificates (
-                serial_number, type, subject_id, public_key, certificate_data,
+                serial_number, certificate_type, subject_info, public_key, certificate_data,
                 expires_at, is_active
             ) VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING *
@@ -20,7 +20,7 @@ class CertificateModel {
         const values = [
             certificate.serialNumber,
             certificate.type,
-            certificate.subjectId,
+            JSON.stringify({id: certificate.subjectId}),
             certificate.publicKey,
             JSON.stringify(certificate.certificateData),
             certificate.expiresAt,
@@ -48,7 +48,7 @@ class CertificateModel {
     ): Promise<Certificate | null> {
         let query = `
             SELECT * FROM certificates 
-            WHERE subject_id = $1 AND type = $2
+            WHERE subject_info->>'id' = $1 AND certificate_type = $2
         `;
 
         if (activeOnly) {
@@ -57,7 +57,7 @@ class CertificateModel {
 
         query += ` ORDER BY issued_at DESC LIMIT 1`;
 
-        const result = await this.db.query(query, [subjectId, type]);
+        const result = await this.db.query(query, [subjectId.toString(), type]);
         return result.rows.length > 0 ? this.mapRowToCertificate(result.rows[0]) : null;
     }
 
@@ -68,7 +68,7 @@ class CertificateModel {
     ): Promise<Certificate[]> {
         let query = `
             SELECT * FROM certificates 
-            WHERE subject_id = $1 AND type = $2
+            WHERE subject_info->>'id' = $1 AND certificate_type = $2
         `;
 
         if (activeOnly) {
@@ -77,7 +77,7 @@ class CertificateModel {
 
         query += ` ORDER BY issued_at DESC`;
 
-        const result = await this.db.query(query, [subjectId, type]);
+        const result = await this.db.query(query, [subjectId.toString(), type]);
         return result.rows.map((row: any) => this.mapRowToCertificate(row));
     }
 
@@ -139,8 +139,8 @@ class CertificateModel {
                 COUNT(*) FILTER (WHERE is_active = true AND revoked_at IS NULL) as active_certificates,
                 COUNT(*) FILTER (WHERE expires_at < CURRENT_TIMESTAMP) as expired_certificates,
                 COUNT(*) FILTER (WHERE revoked_at IS NOT NULL) as revoked_certificates,
-                COUNT(*) FILTER (WHERE type = 'vehicle') as vehicle_certificates,
-                COUNT(*) FILTER (WHERE type = 'digital_key') as digital_key_certificates
+                COUNT(*) FILTER (WHERE certificate_type = 'vehicle') as vehicle_certificates,
+                COUNT(*) FILTER (WHERE certificate_type = 'digital_key') as digital_key_certificates
             FROM certificates
         `;
 
@@ -217,7 +217,7 @@ class CertificateModel {
     ): Promise<Certificate[]> {
         const query = `
             SELECT * FROM certificates 
-            WHERE type = $1
+            WHERE certificate_type = $1
             ORDER BY issued_at DESC
             LIMIT $2 OFFSET $3
         `;
@@ -227,11 +227,20 @@ class CertificateModel {
     }
 
     private mapRowToCertificate(row: any): Certificate {
+        // Parse subject_info JSONB field
+        let subjectId: number;
+        if (typeof row.subject_info === 'string') {
+            const parsed = JSON.parse(row.subject_info);
+            subjectId = parseInt(parsed.id);
+        } else {
+            subjectId = parseInt(row.subject_info.id);
+        }
+
         return {
             id: row.id,
             serialNumber: row.serial_number,
-            type: row.type,
-            subjectId: row.subject_id,
+            type: row.certificate_type,
+            subjectId: subjectId,
             publicKey: row.public_key,
             certificateData: JSON.parse(row.certificate_data),
             issuedAt: row.issued_at,
