@@ -12,12 +12,31 @@ export interface Vehicle {
     vin: string;
     model: string;
     owner_id: number | null;
-    tc375_device_id: string;
+    device_id: string;
+    secret_hash: string;
     status: 'active' | 'inactive' | 'maintenance';
     created_at?: string;
     updated_at?: string;
 }
 
+export type PairingSessionStatus = 'pending' | 'verified' | 'expired' | 'cancelled';
+
+export interface PairingSession {
+    id?: number;
+    session_id: string;
+    vehicle_id: number;
+    user_id: number | null;
+    pin_salt: Buffer;
+    pin_hash: Buffer;
+    owner_candidate_user_id?: number | null;
+    pairing_token?: string | null;
+    attempts_remaining: number;
+    status: PairingSessionStatus;
+    expires_at: string;
+    last_attempt_at?: string;
+    created_at?: string;
+    updated_at?: string;
+}
 export interface DigitalKey {
     id?: number;
     user_id: number;
@@ -33,14 +52,14 @@ export interface DigitalKey {
 export interface KeyPermissions {
     unlock: boolean;
     lock: boolean;
-    engine_on: boolean;
+    startEngine: boolean;
 }
 
 export interface AccessLog {
     id?: number;
     user_id: number;
     vehicle_id: number;
-    action: 'unlock' | 'lock' | 'engine_on' | 'status_check';
+    action: 'unlock' | 'lock' | 'startEngine' | 'status_check';
     result: 'success' | 'failure' | 'timeout';
     error_message?: string;
     ip_address?: string;
@@ -72,20 +91,20 @@ export interface VehicleStatus {
 }
 
 export interface VehicleCommand {
-    action: 'unlock' | 'lock' | 'engine_on';
+    action: 'unlock' | 'lock' | 'startEngine';
     user_id: number;
     vehicle_id: number;
     key_id: number;
 }
 
 export interface SocketEvent {
-    'vehicle:connect': { vehicle_id: number; tc375_device_id: string };
+    'vehicle:connect': { vehicle_id: number; device_id: string };
     'vehicle:command': VehicleCommand;
     'vehicle:status_request': { vehicle_id: number };
     'vehicle:status_update': { vehicle_id: number; status: VehicleStatus };
     'vehicle:command_result': { 
         vehicle_id: number; 
-        action: 'unlock' | 'lock' | 'engine_on'; 
+        action: 'unlock' | 'lock' | 'startEngine'; 
         result: 'success' | 'failure' | 'timeout';
         error_message?: string;
     };
@@ -119,7 +138,7 @@ export interface CertificateData {
 
 export interface CertificateSubject {
     vehicleId?: number;
-    tc375Serial?: string;
+    deviceSerial?: string;
     manufacturer?: string;
     model?: string;
     userId?: number;
@@ -129,11 +148,11 @@ export interface CertificateSubject {
 export interface VehicleCertificate extends CertificateData {
     subject: {
         vehicleId: number;
-        tc375Serial: string;
+        deviceSerial: string;
         manufacturer: string;
         model: string;
     };
-    capabilities: ('unlock' | 'lock' | 'engine_on')[];
+    capabilities: ('unlock' | 'lock' | 'startEngine')[];
 }
 
 export interface DigitalKeyCertificate extends CertificateData {
@@ -152,6 +171,18 @@ export interface RootCAKeys {
     publicKey: string;
     createdAt?: string;
     isActive: boolean;
+}
+
+export interface RootCACertificate {
+    id: string;
+    subject: string;
+    issuer: string;
+    publicKey: string;
+    signature: string;
+    notBefore: string;
+    notAfter: string;
+    serialNumber: string;
+    version: number;
 }
 
 export interface CertificateRevocationEntry {

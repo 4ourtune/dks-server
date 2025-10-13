@@ -84,7 +84,7 @@ class SocketService {
         data: SocketEvent['vehicle:connect']
     ): Promise<void> {
         try {
-            const { vehicle_id, tc375_device_id } = data;
+            const { vehicle_id, device_id } = data;
 
             if (!socket.userId) {
                 socket.emit('vehicle:error', { 
@@ -118,7 +118,7 @@ class SocketService {
                 }
             }
 
-            const connected = await this.vehicleService.connectVehicle(vehicle_id, tc375_device_id);
+            const connected = await this.vehicleService.connectVehicle(vehicle_id, device_id);
             
             if (connected) {
                 socket.vehicleId = vehicle_id;

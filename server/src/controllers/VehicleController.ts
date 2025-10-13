@@ -24,27 +24,30 @@ class VehicleController {
                 return;
             }
 
-            const { vin, model, tc375_device_id, status = 'active' } = req.body;
+            const { vin, model, device_id, status = 'active' } = req.body;
 
-            const vehicle = await this.vehicleService.registerVehicle({
+            const { vehicle: createdVehicle, secret } = await this.vehicleService.registerVehicle({
                 vin,
                 model,
                 owner_id: null, // System vehicle has no initial owner
-                tc375_device_id,
+                device_id: device_id,
                 status
             });
 
-            this.logger.vehicle('system_register', { vehicleId: vehicle.id!, userId, success: true });
+            this.logger.vehicle('system_register', { vehicleId: createdVehicle.id!, userId, success: true });
 
             res.status(201).json({
                 message: 'Vehicle registered in system successfully',
                 vehicle: {
-                    id: vehicle.id,
-                    vin: vehicle.vin,
-                    model: vehicle.model,
-                    tc375_device_id: vehicle.tc375_device_id,
-                    status: vehicle.status,
-                    created_at: vehicle.created_at
+                    id: createdVehicle.id,
+                    vin: createdVehicle.vin,
+                    model: createdVehicle.model,
+                    device_id: createdVehicle.device_id,
+                    status: createdVehicle.status,
+                    created_at: createdVehicle.created_at
+                },
+                credentials: {
+                    secret
                 }
             });
         } catch (error) {
@@ -95,7 +98,7 @@ class VehicleController {
                 {
                     unlock: true,
                     lock: true,
-                    engine_on: true
+                    startEngine: true
                 }
             );
 
@@ -134,27 +137,30 @@ class VehicleController {
                 return;
             }
 
-            const { vin, model, tc375_device_id, status = 'active' } = req.body;
+            const { vin, model, device_id, status = 'active' } = req.body;
 
-            const vehicle = await this.vehicleService.registerVehicle({
+            const { vehicle: createdVehicle, secret } = await this.vehicleService.registerVehicle({
                 vin,
                 model,
                 owner_id: userId,
-                tc375_device_id,
+                device_id: device_id,
                 status
             });
 
-            this.logger.vehicle('register', { vehicleId: vehicle.id!, userId, success: true });
+            this.logger.vehicle('register', { vehicleId: createdVehicle.id!, userId, success: true });
 
             res.status(201).json({
                 message: 'Vehicle registered successfully',
                 vehicle: {
-                    id: vehicle.id,
-                    vin: vehicle.vin,
-                    model: vehicle.model,
-                    tc375_device_id: vehicle.tc375_device_id,
-                    status: vehicle.status,
-                    created_at: vehicle.created_at
+                    id: createdVehicle.id,
+                    vin: createdVehicle.vin,
+                    model: createdVehicle.model,
+                    device_id: createdVehicle.device_id,
+                    status: createdVehicle.status,
+                    created_at: createdVehicle.created_at
+                },
+                credentials: {
+                    secret
                 }
             });
         } catch (error) {
@@ -270,12 +276,12 @@ class VehicleController {
                 return;
             }
 
-            const { vin, model, tc375_device_id, status } = req.body;
+            const { vin, model, device_id, status } = req.body;
             const updateData: any = {};
 
             if (vin) updateData.vin = vin;
             if (model) updateData.model = model;
-            if (tc375_device_id) updateData.tc375_device_id = tc375_device_id;
+            if (device_id) updateData.device_id = device_id;
             if (status) updateData.status = status;
 
             const updatedVehicle = await this.vehicleService.updateVehicle(vehicleId, updateData);
@@ -344,13 +350,13 @@ class VehicleController {
     };
 
     engineOn = async (req: AuthRequest, res: Response): Promise<void> => {
-        await this.executeVehicleCommand(req, res, 'engine_on');
+        await this.executeVehicleCommand(req, res, 'startEngine');
     };
 
     private executeVehicleCommand = async (
         req: AuthRequest, 
         res: Response, 
-        action: 'unlock' | 'lock' | 'engine_on'
+        action: 'unlock' | 'lock' | 'startEngine'
     ): Promise<void> => {
         try {
             const userId = req.user?.id;

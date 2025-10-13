@@ -1,4 +1,4 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import CertificateController from '../controllers/CertificateController';
 import { authenticateToken } from '../middleware/auth';
 import { validate, certificateValidationSchemas } from '../middleware/validation';
@@ -43,7 +43,6 @@ router.get('/vehicle/:vehicleId',
 );
 
 router.get('/root-ca/public-key',
-    authenticateToken,
     certificateController.getRootCAPublicKey
 );
 

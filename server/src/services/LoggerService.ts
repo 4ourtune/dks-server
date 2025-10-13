@@ -152,53 +152,53 @@ class LoggerService {
         // Detailed error information
         if (error) {
             const errorInfo = error instanceof Error ? error : new Error(String(error));
-            console.log(`${this.colorize('├─', 'red')} Error: ${errorInfo.message}`);
+            console.log(`${this.colorize('?쒋?', 'red')} Error: ${errorInfo.message}`);
             
             if (errorInfo.stack && this.shouldLog(LogLevel.DEBUG)) {
                 const stackLines = errorInfo.stack.split('\n').slice(1, 4); // Show top 3 stack lines
-                console.log(`${this.colorize('├─', 'red')} Stack Trace:`);
+                console.log(`${this.colorize('?쒋?', 'red')} Stack Trace:`);
                 stackLines.forEach((line, index) => {
                     const isLast = index === stackLines.length - 1;
-                    const prefix = isLast ? '└─' : '├─';
-                    console.log(`${this.colorize('│  ' + prefix, 'red')} ${line.trim()}`);
+                    const prefix = isLast ? '?붴?' : '?쒋?';
+                    console.log(`${this.colorize('?? ' + prefix, 'red')} ${line.trim()}`);
                 });
             }
         }
 
         // Context information
         if (context && Object.keys(context).length > 0) {
-            console.log(`${this.colorize('├─', 'red')} Context:`);
-            if (context.userId) console.log(`${this.colorize('│  ├─', 'red')} User ID: ${context.userId}`);
-            if (context.vehicleId) console.log(`${this.colorize('│  ├─', 'red')} Vehicle ID: ${context.vehicleId}`);
-            if (context.keyId) console.log(`${this.colorize('│  ├─', 'red')} Key ID: ${context.keyId}`);
-            if (context.ip) console.log(`${this.colorize('│  └─', 'red')} IP: ${context.ip}`);
+            console.log(`${this.colorize('?쒋?', 'red')} Context:`);
+            if (context.userId) console.log(`${this.colorize('?? ?쒋?', 'red')} User ID: ${context.userId}`);
+            if (context.vehicleId) console.log(`${this.colorize('?? ?쒋?', 'red')} Vehicle ID: ${context.vehicleId}`);
+            if (context.keyId) console.log(`${this.colorize('?? ?쒋?', 'red')} Key ID: ${context.keyId}`);
+            if (context.ip) console.log(`${this.colorize('?? ?붴?', 'red')} IP: ${context.ip}`);
         }
 
         // Request data (only in debug mode)
         if (context?.requestData && this.shouldLog(LogLevel.DEBUG)) {
-            console.log(`${this.colorize('├─', 'red')} Request Data:`);
-            console.log(`${this.colorize('│  └─', 'red')} ${JSON.stringify(context.requestData, null, 2).replace(/\n/g, '\n│     ')}`);
+            console.log(`${this.colorize('?쒋?', 'red')} Request Data:`);
+            console.log(`${this.colorize('?? ?붴?', 'red')} ${JSON.stringify(context.requestData, null, 2).replace(/\n/g, '\n??    ')}`);
         }
 
         // System state (only in debug mode)
         if (context?.systemState && this.shouldLog(LogLevel.DEBUG)) {
-            console.log(`${this.colorize('└─', 'red')} System State:`);
-            console.log(`   ${this.colorize('└─', 'red')} ${JSON.stringify(context.systemState, null, 2).replace(/\n/g, '\n      ')}`);
+            console.log(`${this.colorize('?붴?', 'red')} System State:`);
+            console.log(`   ${this.colorize('?붴?', 'red')} ${JSON.stringify(context.systemState, null, 2).replace(/\n/g, '\n      ')}`);
         }
 
         // Write detailed error to file
         let fileContent = `[ERROR] [${timestamp}] ${message}\n`;
         if (error) {
             const errorInfo = error instanceof Error ? error : new Error(String(error));
-            fileContent += `├─ Error: ${errorInfo.message}\n`;
+            fileContent += `?쒋? Error: ${errorInfo.message}\n`;
             if (errorInfo.stack) {
-                fileContent += `├─ Stack: ${errorInfo.stack.replace(/\n/g, '\n│  ')}\n`;
+                fileContent += `?쒋? Stack: ${errorInfo.stack.replace(/\n/g, '\n?? ')}\n`;
             }
         }
         if (context) {
-            fileContent += `├─ Context: ${JSON.stringify(context, null, 2).replace(/\n/g, '\n│  ')}\n`;
+            fileContent += `?쒋? Context: ${JSON.stringify(context, null, 2).replace(/\n/g, '\n?? ')}\n`;
         }
-        fileContent += `└─ Timestamp: ${new Date().toISOString()}`;
+        fileContent += `?붴? Timestamp: ${new Date().toISOString()}`;
         
         this.writeToFile(fileContent, true);
     }

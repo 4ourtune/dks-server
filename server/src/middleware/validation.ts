@@ -48,8 +48,25 @@ export const vehicleSchema = z.object({
     body: z.object({
         vin: z.string().length(17, 'VIN must be exactly 17 characters'),
         model: z.string().min(1, 'Model is required').max(100, 'Model name too long'),
-        tc375_device_id: z.string().min(1, 'TC375 device ID is required').max(32, 'Device ID too long'),
+        device_id: z.string().min(1, 'Device ID is required').max(32, 'Device ID too long'),
         status: z.enum(['active', 'inactive', 'maintenance']).optional()
+    })
+});
+
+
+export const pinPairingConfirmSchema = z.object({
+    body: z.object({
+        vehicleId: z.union([
+            z.number().positive('Vehicle ID must be positive'),
+            z.string().regex(/^\d+$/, 'Vehicle ID must be numeric').transform((value) => Number(value))
+        ]),
+        pin: z.string().regex(/^[A-Z0-9]{6}$/, 'PIN must be 6 alphanumeric characters')
+    })
+});
+
+export const pinPairingStatusSchema = z.object({
+    query: z.object({
+        vehicleId: z.string().regex(/^\d+$/, 'Vehicle ID must be numeric')
     })
 });
 
@@ -178,7 +195,7 @@ export const certificateValidationSchemas = {
     vehicleCertificateSchema: z.object({
         body: z.object({
             vehicleId: z.number().positive('Invalid vehicle ID'),
-            tc375Serial: z.string().min(1, 'TC375 serial is required').max(32, 'Serial too long'),
+            deviceSerial: z.string().min(1, 'Device serial is required').max(32, 'Serial too long'),
             manufacturer: z.string().max(50, 'Manufacturer name too long').optional(),
             model: z.string().max(100, 'Model name too long').optional(),
             validityDays: z.number().positive('Validity days must be positive').max(3650, 'Maximum validity is 10 years').optional()

@@ -1,6 +1,17 @@
 import Database from '../database/connection';
 import { Vehicle } from '../types';
 
+type CreateVehicleInput = {
+    vin: string;
+    model: string;
+    owner_id: number | null;
+    device_id: string;
+    secret_hash: string;
+    status: Vehicle['status'];
+};
+
+type UpdateVehicleInput = Partial<Pick<Vehicle, 'vin' | 'model' | 'owner_id' | 'device_id' | 'status' | 'secret_hash'>>;
+
 class VehicleModel {
     private db: Database;
 
@@ -8,10 +19,10 @@ class VehicleModel {
         this.db = Database.getInstance();
     }
 
-    async create(vehicleData: Omit<Vehicle, 'id' | 'created_at' | 'updated_at'>): Promise<Vehicle> {
+    async create(vehicleData: CreateVehicleInput): Promise<Vehicle> {
         const result = await this.db.run(
-            'INSERT INTO vehicles (vin, model, owner_id, tc375_device_id, status) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-            [vehicleData.vin, vehicleData.model, vehicleData.owner_id || null, vehicleData.tc375_device_id, vehicleData.status]
+            'INSERT INTO vehicles (vin, model, owner_id, device_id, secret_hash, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+            [vehicleData.vin, vehicleData.model, vehicleData.owner_id, vehicleData.device_id, vehicleData.secret_hash, vehicleData.status]
         );
 
         const vehicle = await this.findById(result.lastID!);
@@ -34,9 +45,9 @@ class VehicleModel {
         return vehicle || null;
     }
 
-    async findByTC375DeviceId(deviceId: string): Promise<Vehicle | null> {
+    async findByDeviceId(deviceId: string): Promise<Vehicle | null> {
         const vehicle = await this.db.get(
-            'SELECT * FROM vehicles WHERE tc375_device_id = $1',
+            'SELECT * FROM vehicles WHERE device_id = $1',
             [deviceId]
         );
         return vehicle || null;
@@ -50,7 +61,7 @@ class VehicleModel {
         return vehicles;
     }
 
-    async update(id: number, vehicleData: Partial<Omit<Vehicle, 'id' | 'created_at' | 'updated_at'>>): Promise<Vehicle | null> {
+    async update(id: number, vehicleData: UpdateVehicleInput): Promise<Vehicle | null> {
         const updateFields: string[] = [];
         const updateValues: any[] = [];
 
@@ -64,9 +75,14 @@ class VehicleModel {
             updateValues.push(vehicleData.model);
         }
 
-        if (vehicleData.tc375_device_id) {
-            updateFields.push(`tc375_device_id = $${updateValues.length + 1}`);
-            updateValues.push(vehicleData.tc375_device_id);
+        if (vehicleData.device_id) {
+            updateFields.push(`device_id = $${updateValues.length + 1}`);
+            updateValues.push(vehicleData.device_id);
+        }
+
+        if (vehicleData.secret_hash) {
+            updateFields.push(`secret_hash = $${updateValues.length + 1}`);
+            updateValues.push(vehicleData.secret_hash);
         }
 
         if (vehicleData.status) {
@@ -85,6 +101,15 @@ class VehicleModel {
         await this.db.run(
             `UPDATE vehicles SET ${updateFields.join(', ')} WHERE id = $${updateValues.length}`,
             updateValues
+        );
+
+        return this.findById(id);
+    }
+
+    async updateSecretHash(id: number, secretHash: string): Promise<Vehicle | null> {
+        await this.db.run(
+            'UPDATE vehicles SET secret_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [secretHash, id]
         );
 
         return this.findById(id);

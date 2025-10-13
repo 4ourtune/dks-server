@@ -1,4 +1,4 @@
-import ECCCryptoService from './ECCCryptoService';
+﻿import ECCCryptoService from './ECCCryptoService';
 import CryptoService from './CryptoService';
 import CertificateModel from '../models/Certificate';
 import { 
@@ -7,12 +7,14 @@ import {
     DigitalKeyCertificate, 
     KeyPermissions,
     CertificateData,
-    RootCAKeys
+    RootCAKeys,
+    RootCACertificate
 } from '../types';
 
 class CertificateAuthorityService {
     private certificateModel: CertificateModel;
-    private rootCAKeys: { publicKey: string; privateKey: string } | null = null;
+    private rootCAKeys: { publicKey: string; privateKey: string; keyId: string; createdAt?: string } | null = null;
+    private rootCACertificate: RootCACertificate | null = null;
 
     constructor() {
         this.certificateModel = new CertificateModel();
@@ -20,14 +22,18 @@ class CertificateAuthorityService {
 
     async initializeRootCA(): Promise<void> {
         try {
+            await this.certificateModel.ensureRootCATable();
             const existingCA = await this.certificateModel.getRootCAKeys();
             
             if (existingCA) {
                 const decryptedPrivateKey = this.decryptRootCAPrivateKey(existingCA.privateKeyEncrypted);
                 this.rootCAKeys = {
                     publicKey: existingCA.publicKey,
-                    privateKey: decryptedPrivateKey
+                    privateKey: decryptedPrivateKey,
+                    keyId: existingCA.keyId,
+                    createdAt: existingCA.createdAt
                 };
+                this.rootCACertificate = this.buildRootCACertificate(existingCA.keyId, existingCA.createdAt);
                 console.log('Root CA loaded successfully');
                 return;
             }
@@ -43,7 +49,13 @@ class CertificateAuthorityService {
                 isActive: true
             });
 
-            this.rootCAKeys = keyPair;
+            this.rootCAKeys = {
+                publicKey: keyPair.publicKey,
+                privateKey: keyPair.privateKey,
+                keyId,
+                createdAt: new Date().toISOString()
+            };
+            this.rootCACertificate = this.buildRootCACertificate(keyId);
             console.log('Root CA initialized successfully');
 
         } catch (error) {
@@ -73,7 +85,7 @@ class CertificateAuthorityService {
 
     async issueVehicleCertificate(
         vehicleId: number,
-        tc375Serial: string,
+        deviceSerial: string,
         manufacturer: string = 'Unknown',
         model: string = 'Unknown',
         validityDays: number = 365
@@ -91,7 +103,7 @@ class CertificateAuthorityService {
 
         const vehicleCert = ECCCryptoService.createVehicleCertificate(
             vehicleId,
-            tc375Serial,
+            deviceSerial,
             manufacturer,
             model,
             vehicleKeyPair.publicKey,
@@ -191,11 +203,67 @@ class CertificateAuthorityService {
         return await this.certificateModel.getCertificateRevocationList();
     }
 
-    async getRootCAPublicKey(): Promise<string> {
+    private buildRootCACertificate(keyId: string, createdAt?: string): RootCACertificate {
         if (!this.rootCAKeys) {
             throw new Error('Root CA not initialized');
         }
-        return this.rootCAKeys.publicKey;
+
+        const issuedAt = createdAt ? new Date(createdAt) : new Date();
+        const notBefore = issuedAt.toISOString();
+        const notAfter = new Date(issuedAt.getTime() + 10 * 365 * 24 * 60 * 60 * 1000).toISOString();
+
+        const certificatePayload = {
+            id: 'dks-root-ca',
+            subject: 'DKS Root CA',
+            issuer: 'DKS Root CA',
+            publicKey: this.rootCAKeys.publicKey,
+            notBefore,
+            notAfter,
+            serialNumber: keyId,
+            version: 1
+        };
+
+        const signatureBase = JSON.stringify({
+            id: certificatePayload.id,
+            subject: certificatePayload.subject,
+            issuer: certificatePayload.issuer,
+            publicKey: certificatePayload.publicKey,
+            notBefore: certificatePayload.notBefore,
+            notAfter: certificatePayload.notAfter,
+            serialNumber: certificatePayload.serialNumber,
+            version: certificatePayload.version
+        });
+
+        const signature = ECCCryptoService.signWithECDSA(
+            signatureBase,
+            this.rootCAKeys.privateKey
+        );
+
+        return {
+            ...certificatePayload,
+            signature
+        };
+    }
+
+    async getRootCACertificate(): Promise<RootCACertificate> {
+        if (!this.rootCAKeys) {
+            await this.initializeRootCA();
+        }
+
+        if (!this.rootCAKeys) {
+            throw new Error('Root CA not initialized');
+        }
+
+        if (!this.rootCACertificate) {
+            this.rootCACertificate = this.buildRootCACertificate(this.rootCAKeys.keyId, this.rootCAKeys.createdAt);
+        }
+
+        return this.rootCACertificate;
+    }
+
+    async getRootCAPublicKey(): Promise<string> {
+        const certificate = await this.getRootCACertificate();
+        return certificate.publicKey;
     }
 
     async getCertificateBySerialNumber(serialNumber: string): Promise<Certificate | null> {
@@ -253,7 +321,7 @@ class CertificateAuthorityService {
             const certData = existingCert.certificateData as VehicleCertificate;
             return this.issueVehicleCertificate(
                 existingCert.subjectId,
-                certData.subject.tc375Serial,
+                certData.subject.deviceSerial,
                 certData.subject.manufacturer,
                 certData.subject.model,
                 validityDays
@@ -285,3 +353,5 @@ class CertificateAuthorityService {
 }
 
 export default CertificateAuthorityService;
+
+

@@ -1,7 +1,7 @@
 {
   "name": "digital-key-server",
   "version": "1.0.0",
-  "description": "Digital key system backend server for TC375 microcontroller and smartphone app",
+  "description": "Digital key system backend server for vehicle microcontroller and smartphone app",
   "main": "dist/app.js",
   "scripts": {
     "dev": "nodemon src/app.ts",
@@ -11,7 +11,8 @@
     "test": "jest",
     "db:init": "npm run build && node dist/database/init.js",
     "lint": "echo 'No linting configured'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "vehicle:set-secret": "ts-node src/scripts/setVehicleSecret.ts"
   },
   "dependencies": {
     "@types/elliptic": "^6.4.18",
@@ -47,7 +48,7 @@
   "keywords": [
     "digital-key",
     "vehicle",
-    "TC375",
+    "digital-key",
     "authentication",
     "security"
   ],

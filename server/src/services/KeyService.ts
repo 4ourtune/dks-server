@@ -107,7 +107,7 @@ class KeyService {
         userId: number,
         vehicleId: number,
         keyId: number,
-        action: 'unlock' | 'lock' | 'engine_on',
+        action: 'unlock' | 'lock' | 'startEngine',
         ipAddress?: string,
         userAgent?: string
     ): Promise<{ success: boolean; message: string }> {
@@ -147,8 +147,9 @@ class KeyService {
                 return 'unlock';
             case 'lock':
                 return 'lock';
+            case 'startEngine':
             case 'engine_on':
-                return 'engine_on';
+                return 'startEngine';
             default:
                 throw new Error(`Unknown action: ${action}`);
         }
@@ -182,7 +183,7 @@ class KeyService {
                 return { success: false, error: 'Key validation failed' };
             }
 
-            await this.simulateVehicleCommand(vehicle.tc375_device_id, action);
+            await this.simulateVehicleCommand(vehicle.device_id, action);
             
             return { success: true };
         } catch (error) {
@@ -193,7 +194,7 @@ class KeyService {
     private async simulateVehicleCommand(deviceId: string, action: string): Promise<void> {
         return new Promise((resolve) => {
             setTimeout(() => {
-                console.log(`Sent ${action} command to TC375 device: ${deviceId}`);
+                console.log(`Sent ${action} command to Device device: ${deviceId}`);
                 resolve();
             }, 100);
         });
@@ -202,7 +203,7 @@ class KeyService {
     private async logAccess(
         userId: number,
         vehicleId: number,
-        action: 'unlock' | 'lock' | 'engine_on',
+        action: 'unlock' | 'lock' | 'startEngine',
         result: 'success' | 'failure' | 'timeout',
         errorMessage?: string,
         ipAddress?: string,

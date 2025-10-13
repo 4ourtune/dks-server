@@ -8,6 +8,18 @@ class CertificateModel {
         this.db = Database.getInstance();
     }
 
+    async ensureRootCATable(): Promise<void> {
+        await this.db.run(`CREATE TABLE IF NOT EXISTS root_ca_keys (
+            id SERIAL PRIMARY KEY,
+            key_id VARCHAR(64) UNIQUE NOT NULL,
+            private_key_encrypted TEXT NOT NULL,
+            public_key TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_active BOOLEAN DEFAULT true
+        )`);
+        await this.db.run(`CREATE INDEX IF NOT EXISTS idx_root_ca_keys_active ON root_ca_keys(is_active) WHERE is_active = true`);
+    }
+
     async create(certificate: Certificate): Promise<Certificate> {
         const query = `
             INSERT INTO certificates (

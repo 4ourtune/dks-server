@@ -41,7 +41,7 @@ class ECCCryptoService extends CryptoService {
 
     static createVehicleCertificate(
         vehicleId: number,
-        tc375Serial: string,
+        deviceSerial: string,
         manufacturer: string,
         model: string,
         vehiclePublicKey: string,
@@ -59,12 +59,12 @@ class ECCCryptoService extends CryptoService {
             issuer: 'DKS Root CA',
             subject: {
                 vehicleId,
-                tc375Serial,
+                deviceSerial,
                 manufacturer,
                 model
             },
             publicKey: vehiclePublicKey,
-            capabilities: ['unlock', 'lock', 'engine_on'],
+            capabilities: ['unlock', 'lock', 'startEngine'],
             validFrom,
             validTo,
             signature: ''

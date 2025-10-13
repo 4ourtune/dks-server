@@ -1,6 +1,14 @@
+import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
+
 import VehicleModel from '../models/Vehicle';
 import DigitalKeyModel from '../models/DigitalKey';
 import { Vehicle, VehicleStatus, AccessLog } from '../types';
+
+type VehicleRegistrationInput = Omit<Vehicle, 'id' | 'created_at' | 'updated_at' | 'secret_hash'>;
+
+const VEHICLE_SECRET_BYTES = 32;
+const VEHICLE_SECRET_BCRYPT_ROUNDS = 12;
 
 class VehicleService {
     private vehicleModel: VehicleModel;
@@ -13,18 +21,52 @@ class VehicleService {
         this.connectedVehicles = new Map();
     }
 
-    async registerVehicle(vehicleData: Omit<Vehicle, 'id' | 'created_at' | 'updated_at'>): Promise<Vehicle> {
+    async registerVehicle(vehicleData: VehicleRegistrationInput): Promise<{ vehicle: Vehicle; secret: string }> {
         const existingVehicle = await this.vehicleModel.findByVin(vehicleData.vin);
         if (existingVehicle) {
             throw new Error('Vehicle with this VIN already exists');
         }
 
-        const existingDevice = await this.vehicleModel.findByTC375DeviceId(vehicleData.tc375_device_id);
+        const existingDevice = await this.vehicleModel.findByDeviceId(vehicleData.device_id);
         if (existingDevice) {
-            throw new Error('TC375 device already registered');
+            throw new Error('Device already registered');
         }
 
-        return await this.vehicleModel.create(vehicleData);
+        const secret = this.generateVehicleSecret();
+        const secretHash = await this.hashVehicleSecret(secret);
+
+        const vehicle = await this.vehicleModel.create({
+            ...vehicleData,
+            secret_hash: secretHash
+        });
+
+        return { vehicle, secret };
+    }
+
+    async setVehicleSecret(vehicleId: number, plainSecret: string): Promise<Vehicle> {
+        const vehicle = await this.vehicleModel.findById(vehicleId);
+        if (!vehicle) {
+            throw new Error('Vehicle not found');
+        }
+
+        const secretHash = await this.hashVehicleSecret(plainSecret);
+        const updatedVehicle = await this.vehicleModel.updateSecretHash(vehicleId, secretHash);
+
+        return updatedVehicle!;
+    }
+
+    async validateVehicleSecret(vehicleId: number, secret: string): Promise<Vehicle | null> {
+        const vehicle = await this.vehicleModel.findById(vehicleId);
+        if (!vehicle) {
+            return null;
+        }
+
+        const isValid = await bcrypt.compare(secret, vehicle.secret_hash);
+        if (!isValid) {
+            return null;
+        }
+
+        return vehicle;
     }
 
     async updateVehicle(
@@ -43,10 +85,10 @@ class VehicleService {
             }
         }
 
-        if (updateData.tc375_device_id && updateData.tc375_device_id !== vehicle.tc375_device_id) {
-            const existingDevice = await this.vehicleModel.findByTC375DeviceId(updateData.tc375_device_id);
+        if (updateData.device_id && updateData.device_id !== vehicle.device_id) {
+            const existingDevice = await this.vehicleModel.findByDeviceId(updateData.device_id);
             if (existingDevice && existingDevice.id !== vehicleId) {
-                throw new Error('TC375 device already registered');
+                throw new Error('Device already registered');
             }
         }
 
@@ -76,6 +118,11 @@ class VehicleService {
     async getVehicleById(vehicleId: number): Promise<Vehicle | null> {
         return await this.vehicleModel.findById(vehicleId);
     }
+
+    async getVehicleByDeviceId(deviceId: string): Promise<Vehicle | null> {
+        return await this.vehicleModel.findByDeviceId(deviceId);
+    }
+
 
     async getVehicleStatus(vehicleId: number): Promise<VehicleStatus | null> {
         const vehicle = await this.vehicleModel.findById(vehicleId);
@@ -117,13 +164,13 @@ class VehicleService {
         return updatedStatus;
     }
 
-    async connectVehicle(vehicleId: number, tc375DeviceId: string): Promise<boolean> {
+    async connectVehicle(vehicleId: number, deviceId: string): Promise<boolean> {
         const vehicle = await this.vehicleModel.findById(vehicleId);
         if (!vehicle) {
             return false;
         }
 
-        if (vehicle.tc375_device_id !== tc375DeviceId) {
+        if (vehicle.device_id !== deviceId) {
             return false;
         }
 
@@ -134,7 +181,7 @@ class VehicleService {
         const defaultStatus = this.getDefaultVehicleStatus();
         this.connectedVehicles.set(vehicleId, defaultStatus);
         
-        console.log(`Vehicle ${vehicleId} connected with TC375 device ${tc375DeviceId}`);
+        console.log(`Vehicle ${vehicleId} connected with device ${deviceId}`);
         return true;
     }
 
@@ -153,7 +200,7 @@ class VehicleService {
 
     async executeVehicleCommand(
         vehicleId: number,
-        command: 'unlock' | 'lock' | 'engine_on'
+        command: 'unlock' | 'lock' | 'startEngine'
     ): Promise<{ success: boolean; message: string }> {
         const vehicle = await this.vehicleModel.findById(vehicleId);
         if (!vehicle) {
@@ -189,7 +236,7 @@ class VehicleService {
                 return { locked: false, door_locked: false };
             case 'lock':
                 return { locked: true, door_locked: true };
-            case 'engine_on':
+            case 'startEngine':
                 if (currentStatus.locked || currentStatus.door_locked) {
                     throw new Error('Cannot start engine while vehicle is locked');
                 }
@@ -243,7 +290,7 @@ class VehicleService {
             return {
                 status: 'failed',
                 issues: ['Unable to connect to vehicle'],
-                recommendations: ['Check TC375 connection']
+                recommendations: ['Check device connection']
             };
         }
 
@@ -297,6 +344,14 @@ class VehicleService {
 
         const userKeys = await this.digitalKeyModel.findByUserAndVehicle(userId, vehicleId);
         return userKeys !== null && userKeys.is_active;
+    }
+
+    private generateVehicleSecret(): string {
+        return crypto.randomBytes(VEHICLE_SECRET_BYTES).toString('base64url');
+    }
+
+    private hashVehicleSecret(secret: string): Promise<string> {
+        return bcrypt.hash(secret, VEHICLE_SECRET_BCRYPT_ROUNDS);
     }
 }
 

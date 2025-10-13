@@ -13,7 +13,10 @@ import CertificateController from './controllers/CertificateController';
 import authRoutes from './routes/auth';
 import keysRoutes from './routes/keys';
 import vehiclesRoutes from './routes/vehicles';
+import vehicleStatusRoutes from './routes/vehicleStatus';
 import certificateRoutes from './routes/certificates';
+import pairingRoutes from './routes/pairing';
+import devicePairingRoutes from './routes/devicePairing';
 
 import { errorHandler } from './middleware/validation';
 
@@ -128,6 +131,9 @@ class App {
         this.app.use('/api/keys', keysRoutes);
         this.app.use('/api/vehicles', vehiclesRoutes);
         this.app.use('/api/certificates', certificateRoutes);
+        this.app.use('/api/pairing', pairingRoutes);
+        this.app.use('/api/vehicle-status', vehicleStatusRoutes);
+        this.app.use('/api/device', devicePairingRoutes);
 
         this.app.get('/api/status', (req, res) => {
             const logStats = this.logger.getLogStats();
@@ -258,15 +264,15 @@ class App {
         this.server.listen(port, '0.0.0.0', () => {
             const startupMessage = [
                 '='.repeat(60),
-                `🚗 Digital Key System Server`,
+                `Digital Key System Server`,
                 '='.repeat(60),
-                `🚀 Server running on port ${port}`,
-                `📊 Environment: ${process.env.NODE_ENV || 'development'}`,
-                `🔗 Database: PostgreSQL (${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME})`,
-                `📋 Logs: ${this.logger.getLogStats().logDirectory}`,
-                `⚡ Socket.IO enabled`,
-                `🛡️  Security: JWT + bcrypt + rate limiting`,
-                `📝 API endpoints:`,
+                `Server running on port ${port}`,
+                `Environment: ${process.env.NODE_ENV || 'development'}`,
+                `Database: PostgreSQL (${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME})`,
+                `Logs: ${this.logger.getLogStats().logDirectory}`,
+                `Socket.IO enabled`,
+                `Security: JWT + bcrypt + rate limiting`,
+                `API endpoints:`,
                 `   - GET  /                  (API info)`,
                 `   - GET  /health            (Health check)`,
                 `   - GET  /api/status        (Server status + logs)`,
@@ -287,14 +293,14 @@ class App {
                 `   - POST /api/certificates/verify (Verify certificate)`,
                 `   - GET  /api/certificates/root-ca/public-key (Root CA public key)`,
                 `   - GET  /api/certificates/crl (Certificate revocation list)`,
-                `🔌 WebSocket events:`,
-                `   - vehicle:connect         (TC375 connection)`,
+                `WebSocket events:`,
+                `   - vehicle:connect         (device connection)`,
                 `   - vehicle:command         (Vehicle commands)`,
                 `   - vehicle:status_request  (Status updates)`,
                 '='.repeat(60),
-                `✅ Digital Key System is ready!`,
-                `📱 Ready for mobile app connections`,
-                `🖥️  Ready for TC375 connections`,
+                `Digital Key System is ready!`,
+                `Ready for mobile app connections`,
+                `Ready for device connections`,
                 '='.repeat(60)
             ].join('\n');
 

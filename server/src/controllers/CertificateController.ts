@@ -22,12 +22,12 @@ class CertificateController {
 
     issueVehicleCertificate = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
-            const { vehicleId, tc375Serial, manufacturer, model, validityDays } = req.body;
+            const { vehicleId, deviceSerial, manufacturer, model, validityDays } = req.body;
             
-            if (!vehicleId || !tc375Serial) {
+            if (!vehicleId || !deviceSerial) {
                 res.status(400).json({
                     success: false,
-                    message: 'Vehicle ID and TC375 serial are required'
+                    message: 'Vehicle ID and device serial are required'
                 });
                 return;
             }
@@ -43,7 +43,7 @@ class CertificateController {
 
             const certificate = await this.caService.issueVehicleCertificate(
                 vehicleId,
-                tc375Serial,
+                deviceSerial,
                 manufacturer || 'Unknown',
                 model || vehicle.model,
                 validityDays || 365
@@ -312,20 +312,18 @@ class CertificateController {
 
     getRootCAPublicKey = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
-            const publicKey = await this.caService.getRootCAPublicKey();
+            const certificate = await this.caService.getRootCACertificate();
 
             res.json({
                 success: true,
-                data: {
-                    publicKey,
-                    issuer: 'DKS Root CA'
-                }
+                certificate,
+                message: 'Root CA certificate retrieved successfully'
             });
         } catch (error) {
             this.logger.error('Failed to get Root CA public key:', error);
             res.status(500).json({
                 success: false,
-                message: 'Failed to retrieve Root CA public key'
+                message: 'Failed to retrieve Root CA certificate'
             });
         }
     };
