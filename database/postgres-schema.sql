@@ -17,7 +17,8 @@ CREATE TABLE vehicles (
     vin VARCHAR(17) UNIQUE NOT NULL,
     model VARCHAR(100) NOT NULL,
     owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    tc375_device_id VARCHAR(32) UNIQUE,
+    device_id VARCHAR(32) UNIQUE,
+    secret_hash VARCHAR(255) NOT NULL,
     status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'maintenance')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -29,19 +30,40 @@ CREATE TABLE digital_keys (
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     vehicle_id INTEGER REFERENCES vehicles(id) ON DELETE CASCADE,
     key_data TEXT NOT NULL,
-    permissions JSONB NOT NULL DEFAULT '{"unlock": true, "start": false, "trunk": true}',
+    permissions JSONB NOT NULL DEFAULT '{"unlock": true, "lock": true, "startEngine": false}',
     expires_at TIMESTAMP,
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Pairing sessions table (PIN-based pairing)
+CREATE TABLE pairing_sessions (
+    id SERIAL PRIMARY KEY,
+    session_id UUID UNIQUE NOT NULL,
+    vehicle_id INTEGER NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    pin_salt BYTEA NOT NULL,
+    pin_hash BYTEA NOT NULL,
+    owner_candidate_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    pairing_token VARCHAR(128),
+    attempts_remaining INTEGER NOT NULL DEFAULT 5,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'expired', 'cancelled')),
+    expires_at TIMESTAMP NOT NULL,
+    last_attempt_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_pairing_sessions_session_id ON pairing_sessions(session_id);
+CREATE INDEX idx_pairing_sessions_vehicle_id ON pairing_sessions(vehicle_id);
+CREATE INDEX idx_pairing_sessions_status ON pairing_sessions(status);
 -- Access logs table
 CREATE TABLE access_logs (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     vehicle_id INTEGER REFERENCES vehicles(id) ON DELETE SET NULL,
-    action VARCHAR(50) NOT NULL CHECK (action IN ('unlock', 'lock', 'start', 'stop', 'status_check')),
+    action VARCHAR(50) NOT NULL CHECK (action IN ('unlock', 'lock', 'startEngine', 'status_check')),
     result VARCHAR(20) NOT NULL CHECK (result IN ('success', 'failure', 'timeout')),
     error_message TEXT,
     ip_address INET,
@@ -53,7 +75,7 @@ CREATE TABLE access_logs (
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_vehicles_owner_id ON vehicles(owner_id);
 CREATE INDEX idx_vehicles_vin ON vehicles(vin);
-CREATE INDEX idx_vehicles_tc375_device_id ON vehicles(tc375_device_id);
+CREATE INDEX idx_vehicles_device_id ON vehicles(device_id);
 CREATE INDEX idx_digital_keys_user_id ON digital_keys(user_id);
 CREATE INDEX idx_digital_keys_vehicle_id ON digital_keys(vehicle_id);
 CREATE INDEX idx_digital_keys_active ON digital_keys(is_active) WHERE is_active = true;
@@ -80,6 +102,9 @@ CREATE TRIGGER update_vehicles_updated_at BEFORE UPDATE ON vehicles
 
 CREATE TRIGGER update_digital_keys_updated_at BEFORE UPDATE ON digital_keys
     FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+CREATE TRIGGER update_pairing_sessions_updated_at BEFORE UPDATE ON pairing_sessions
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
 
 -- PKI Certificate Management Tables
 
