@@ -58,6 +58,27 @@ CREATE TABLE pairing_sessions (
 CREATE INDEX idx_pairing_sessions_session_id ON pairing_sessions(session_id);
 CREATE INDEX idx_pairing_sessions_vehicle_id ON pairing_sessions(vehicle_id);
 CREATE INDEX idx_pairing_sessions_status ON pairing_sessions(status);
+
+-- PKI session cache for BLE handshake
+CREATE TABLE pki_sessions (
+    id SERIAL PRIMARY KEY,
+    vehicle_id INTEGER NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+    pairing_session_id INTEGER REFERENCES pairing_sessions(id) ON DELETE SET NULL,
+    session_id VARCHAR(128) NOT NULL,
+    session_key TEXT NOT NULL,
+    pairing_token VARCHAR(128),
+    client_nonce VARCHAR(128),
+    server_nonce VARCHAR(128),
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(vehicle_id),
+    UNIQUE(session_id)
+);
+
+CREATE INDEX idx_pki_sessions_vehicle_id ON pki_sessions(vehicle_id);
+CREATE INDEX idx_pki_sessions_session_id ON pki_sessions(session_id);
+
 -- Access logs table
 CREATE TABLE access_logs (
     id SERIAL PRIMARY KEY,
@@ -103,6 +124,8 @@ CREATE TRIGGER update_vehicles_updated_at BEFORE UPDATE ON vehicles
 CREATE TRIGGER update_digital_keys_updated_at BEFORE UPDATE ON digital_keys
     FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 CREATE TRIGGER update_pairing_sessions_updated_at BEFORE UPDATE ON pairing_sessions
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+CREATE TRIGGER update_pki_sessions_updated_at BEFORE UPDATE ON pki_sessions
     FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 

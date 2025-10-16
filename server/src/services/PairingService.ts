@@ -3,7 +3,8 @@ import PairingSessionModel from '../models/PairingSession';
 import VehicleService from './VehicleService';
 import KeyService from './KeyService';
 import LoggerService from './LoggerService';
-import { PairingSessionStatus } from '../types';
+import PKISessionModel from '../models/PKISession';
+import { PairingSessionStatus, PKISessionRecord } from '../types';
 
 interface StartPinSessionResult {
   sessionId: string;
@@ -33,17 +34,20 @@ class PairingService {
   private static readonly DEFAULT_ATTEMPTS = 5;
   private static readonly PIN_TTL_MS = 10 * 60 * 1000;
   private static readonly PIN_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  private static readonly PKI_SESSION_TTL_MS = 15 * 60 * 1000;
 
   private pairingModel: PairingSessionModel;
   private vehicleService: VehicleService;
   private keyService: KeyService;
   private logger: LoggerService;
+  private pkiSessionModel: PKISessionModel;
 
   constructor() {
     this.pairingModel = new PairingSessionModel();
     this.vehicleService = new VehicleService();
     this.keyService = new KeyService();
     this.logger = LoggerService.getInstance();
+    this.pkiSessionModel = new PKISessionModel();
   }
 
   async requestPinFromVehicle(deviceId: string, ownerCandidateUserId?: number): Promise<StartPinSessionResult> {
@@ -89,6 +93,84 @@ class PairingService {
       pin,
       expiresAt,
       maxAttempts: PairingService.DEFAULT_ATTEMPTS,
+    };
+  }
+
+  async refreshPKISession(
+    userId: number,
+    vehicleId: number,
+    options: { pairingToken?: string | null; sessionId?: string | null } = {},
+  ): Promise<{
+    vehicleId: number;
+    sessionId: string;
+    sessionKey: string;
+    expiresAt: string;
+    serverNonce: string;
+    clientNonce: string;
+    pairingToken?: string | null;
+    vehiclePublicKey?: string | null;
+  }> {
+    const vehicle = await this.vehicleService.getVehicleById(vehicleId);
+    if (!vehicle?.id) {
+      throw this.buildError('Vehicle not found', 'VEHICLE_NOT_FOUND');
+    }
+
+    const hasAccess = await this.vehicleService.hasVehicleAccess(userId, vehicleId);
+    if (!hasAccess) {
+      throw this.buildError('User does not have access to this vehicle', 'ACCESS_DENIED');
+    }
+
+    const verifiedSession = await this.pairingModel.findLatestVerifiedByVehicle(vehicleId);
+    if (!verifiedSession) {
+      throw this.buildError('Vehicle pairing has not been completed', 'PAIRING_NOT_VERIFIED');
+    }
+
+    const expectedToken = verifiedSession.pairing_token ?? null;
+    if (expectedToken && options.pairingToken && expectedToken !== options.pairingToken) {
+      throw this.buildError('Pairing token mismatch', 'PAIRING_TOKEN_MISMATCH');
+    }
+
+    const existing = await this.pkiSessionModel.findActiveByVehicle(vehicleId);
+    if (existing && (!options.sessionId || existing.session_id === options.sessionId)) {
+      return this.mapPKISessionRecord(existing, expectedToken);
+    }
+
+    const sessionId = randomUUID();
+    const sessionKey = randomBytes(32).toString('base64');
+    const clientNonce = randomBytes(16).toString('base64');
+    const serverNonce = randomBytes(16).toString('base64');
+    const expiresAt = new Date(Date.now() + PairingService.PKI_SESSION_TTL_MS).toISOString();
+
+    const record = await this.pkiSessionModel.upsert({
+      vehicle_id: vehicleId,
+      pairing_session_id: verifiedSession.id ?? null,
+      session_id: sessionId,
+      session_key: sessionKey,
+      pairing_token: expectedToken,
+      client_nonce: clientNonce,
+      server_nonce: serverNonce,
+      expires_at: expiresAt,
+    });
+
+    this.logger.info('PKI session refreshed', {
+      vehicleId,
+      sessionId,
+      userId,
+    });
+
+    return this.mapPKISessionRecord(record, expectedToken);
+  }
+
+  private mapPKISessionRecord(record: PKISessionRecord, pairingToken: string | null) {
+    return {
+      vehicleId: record.vehicle_id,
+      sessionId: record.session_id,
+      sessionKey: record.session_key,
+      expiresAt: record.expires_at,
+      serverNonce: record.server_nonce ?? '',
+      clientNonce: record.client_nonce ?? '',
+      pairingToken,
+      vehiclePublicKey: null,
     };
   }
 

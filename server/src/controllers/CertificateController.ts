@@ -3,7 +3,12 @@ import { AuthRequest } from '../middleware/auth';
 import CertificateAuthorityService from '../services/CertificateAuthorityService';
 import VehicleService from '../services/VehicleService';
 import LoggerService from '../services/LoggerService';
-import { KeyPermissions } from '../types';
+import { 
+    KeyPermissions, 
+    Certificate as CertificateEntity, 
+    DigitalKeyCertificate, 
+    VehicleCertificate 
+} from '../types';
 
 class CertificateController {
     private caService: CertificateAuthorityService;
@@ -16,12 +21,52 @@ class CertificateController {
         this.logger = LoggerService.getInstance();
     }
 
+    private buildCertificateResponse(certificate: CertificateEntity): any {
+        const baseData: any = certificate.certificateData || {};
+        const notBefore = baseData.validFrom ?? baseData.notBefore ?? certificate.issuedAt;
+        const notAfter = baseData.validTo ?? baseData.notAfter ?? certificate.expiresAt;
+        const parsedVersion = typeof baseData.version === 'string' ? parseFloat(baseData.version) : baseData.version;
+        const version = Number.isFinite(parsedVersion) ? parsedVersion : baseData.version ?? 1;
+
+        const response: any = {
+            id: certificate.serialNumber,
+            serialNumber: certificate.serialNumber,
+            issuer: baseData.issuer,
+            subject: baseData.subject,
+            publicKey: certificate.publicKey,
+            signature: baseData.signature,
+            notBefore: notBefore,
+            notAfter: notAfter,
+            version,
+            type: certificate.type
+        };
+
+        if (certificate.type === 'digital_key') {
+            const digitalData = baseData as DigitalKeyCertificate;
+            response.vehicleId = digitalData.allowedVehicles?.[0] ?? null;
+            response.allowedVehicles = digitalData.allowedVehicles ?? [];
+            response.permissions = digitalData.permissions ?? { unlock: false, lock: false, startEngine: false };
+            response.userId = digitalData.subject?.userId ?? certificate.subjectId;
+            response.keyId = digitalData.subject?.keyId;
+        } else if (certificate.type === 'vehicle') {
+            const vehicleData = baseData as VehicleCertificate;
+            response.vehicleId = vehicleData.subject?.vehicleId;
+            response.deviceId = vehicleData.subject?.deviceSerial;
+            response.capabilities = vehicleData.capabilities ?? [];
+            response.manufacturer = vehicleData.subject?.manufacturer;
+            response.model = vehicleData.subject?.model;
+        }
+
+        return response;
+    }
+
     async initialize(): Promise<void> {
         await this.caService.initializeRootCA();
     }
 
     issueVehicleCertificate = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
+            await this.caService.initializeRootCA();
             const { vehicleId, deviceSerial, manufacturer, model, validityDays } = req.body;
             
             if (!vehicleId || !deviceSerial) {
@@ -50,15 +95,15 @@ class CertificateController {
             );
 
             this.logger.server(`Vehicle certificate issued for vehicle ${vehicleId}`);
+
+            const certificateResponse = this.buildCertificateResponse(certificate);
             
             res.status(201).json({
                 success: true,
                 message: 'Vehicle certificate issued successfully',
+                certificate: certificateResponse,
                 data: {
-                    serialNumber: certificate.serialNumber,
-                    publicKey: certificate.publicKey,
-                    expiresAt: certificate.expiresAt,
-                    certificate: certificate.certificateData
+                    certificate: certificateResponse
                 }
             });
         } catch (error) {
@@ -72,6 +117,7 @@ class CertificateController {
 
     issueDigitalKeyCertificate = async (req: AuthRequest, res: Response): Promise<void> => {
         try {
+            await this.caService.initializeRootCA();
             const { vehicleId, permissions, validityDays } = req.body;
             const userId = req.userId!;
 
@@ -92,23 +138,29 @@ class CertificateController {
                 return;
             }
 
+            const normalizedPermissions: KeyPermissions = {
+                unlock: Boolean((permissions as any).unlock),
+                lock: Boolean((permissions as any).lock),
+                startEngine: Boolean((permissions as any).startEngine ?? (permissions as any).engine_on ?? false),
+            };
+
             const certificate = await this.caService.issueDigitalKeyCertificate(
                 userId,
                 vehicleId,
-                permissions as KeyPermissions,
+                normalizedPermissions,
                 validityDays || 90
             );
 
             this.logger.server(`Digital key certificate issued for user ${userId}, vehicle ${vehicleId}`);
 
+            const certificateResponse = this.buildCertificateResponse(certificate);
+
             res.status(201).json({
                 success: true,
                 message: 'Digital key certificate issued successfully',
+                certificate: certificateResponse,
                 data: {
-                    serialNumber: certificate.serialNumber,
-                    publicKey: certificate.publicKey,
-                    expiresAt: certificate.expiresAt,
-                    certificate: certificate.certificateData
+                    certificate: certificateResponse
                 }
             });
         } catch (error) {
@@ -166,18 +218,13 @@ class CertificateController {
                 return;
             }
 
+            const certificateResponse = this.buildCertificateResponse(certificate);
+
             res.json({
                 success: true,
+                certificate: certificateResponse,
                 data: {
-                    serialNumber: certificate.serialNumber,
-                    type: certificate.type,
-                    publicKey: certificate.publicKey,
-                    issuedAt: certificate.issuedAt,
-                    expiresAt: certificate.expiresAt,
-                    isActive: certificate.isActive,
-                    revokedAt: certificate.revokedAt,
-                    revocationReason: certificate.revocationReason,
-                    certificate: certificate.certificateData
+                    certificate: certificateResponse
                 }
             });
         } catch (error) {
@@ -194,19 +241,13 @@ class CertificateController {
             const userId = req.userId!;
 
             const certificates = await this.caService.getUserCertificates(userId);
+            const certificateResponses = certificates.map(cert => this.buildCertificateResponse(cert));
 
             res.json({
                 success: true,
+                certificates: certificateResponses,
                 data: {
-                    certificates: certificates.map(cert => ({
-                        serialNumber: cert.serialNumber,
-                        type: cert.type,
-                        issuedAt: cert.issuedAt,
-                        expiresAt: cert.expiresAt,
-                        isActive: cert.isActive,
-                        revokedAt: cert.revokedAt,
-                        certificate: cert.certificateData
-                    }))
+                    certificates: certificateResponses
                 }
             });
         } catch (error) {
@@ -241,15 +282,13 @@ class CertificateController {
                 return;
             }
 
+            const certificateResponse = this.buildCertificateResponse(certificate);
+
             res.json({
                 success: true,
+                certificate: certificateResponse,
                 data: {
-                    serialNumber: certificate.serialNumber,
-                    publicKey: certificate.publicKey,
-                    issuedAt: certificate.issuedAt,
-                    expiresAt: certificate.expiresAt,
-                    isActive: certificate.isActive,
-                    certificate: certificate.certificateData
+                    certificate: certificateResponse
                 }
             });
         } catch (error) {
@@ -395,3 +434,4 @@ class CertificateController {
 }
 
 export default CertificateController;
+

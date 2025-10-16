@@ -208,7 +208,8 @@ export const certificateValidationSchemas = {
             permissions: z.object({
                 unlock: z.boolean(),
                 lock: z.boolean(),
-                engine_on: z.boolean()
+                startEngine: z.boolean().optional(),
+                engine_on: z.boolean().optional()
             }),
             validityDays: z.number().positive('Validity days must be positive').max(365, 'Maximum validity is 1 year').optional()
         })

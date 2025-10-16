@@ -191,3 +191,17 @@ export interface CertificateRevocationEntry {
     revokedAt?: string;
     reason: string;
 }
+
+export interface PKISessionRecord {
+    id?: number;
+    vehicle_id: number;
+    pairing_session_id?: number | null;
+    session_id: string;
+    session_key: string;
+    pairing_token?: string | null;
+    client_nonce?: string | null;
+    server_nonce?: string | null;
+    expires_at: string;
+    created_at?: string;
+    updated_at?: string;
+}

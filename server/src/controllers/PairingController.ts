@@ -90,6 +90,41 @@ class PairingController {
       });
     }
   };
+
+  refreshPKISession = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const { vehicleId, pairingToken, sessionId } = req.body ?? {};
+      const numericVehicleId = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : vehicleId;
+
+      if (!Number.isInteger(numericVehicleId) || numericVehicleId <= 0) {
+        res.status(400).json({ error: 'vehicleId is required' });
+        return;
+      }
+
+      const result = await this.pairingService.refreshPKISession(userId, numericVehicleId, {
+        pairingToken: typeof pairingToken === 'string' ? pairingToken : undefined,
+        sessionId: typeof sessionId === 'string' ? sessionId : undefined,
+      });
+
+      res.status(200).json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to refresh PKI session';
+      const code = error instanceof Error && (error as any).code ? (error as any).code : 'PKI_SESSION_ERROR';
+      const status =
+        code === 'ACCESS_DENIED' ? 403 :
+        code === 'VEHICLE_NOT_FOUND' ? 404 :
+        code === 'PAIRING_NOT_VERIFIED' ? 409 :
+        400;
+
+      res.status(status).json({ error: message, code });
+    }
+  };
 }
 
 export default PairingController;

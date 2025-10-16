@@ -80,6 +80,17 @@ class PairingSessionModel {
     return rows as PairingSession[];
   }
 
+  async findLatestVerifiedByVehicle(vehicleId: number): Promise<PairingSession | null> {
+    const row = await this.db.get(
+      `SELECT * FROM pairing_sessions
+       WHERE vehicle_id = $1 AND status = 'verified'
+       ORDER BY updated_at DESC, created_at DESC
+       LIMIT 1`,
+      [vehicleId]
+    );
+    return (row as PairingSession) || null;
+  }
+
   async findBySessionAndVehicle(sessionId: string, vehicleId: number): Promise<PairingSession | null> {
     const row = await this.db.get(
       'SELECT * FROM pairing_sessions WHERE session_id = $1 AND vehicle_id = $2',
