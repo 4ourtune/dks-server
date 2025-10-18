@@ -11,5 +11,6 @@ router.get(
   authenticateVehicle,
   controller.getSessionStatus,
 );
+router.get("/keys", authenticateVehicle, controller.getVehicleKeys);
 
 export default router;
