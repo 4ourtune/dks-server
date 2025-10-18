@@ -253,6 +253,22 @@ class CertificateModel {
     return result.rows.map((row: any) => this.mapRowToCertificate(row));
   }
 
+  async findActiveDigitalKeysForVehicle(
+    vehicleId: number,
+  ): Promise<Certificate[]> {
+    const query = `
+            SELECT *
+            FROM certificates
+            WHERE type = 'digital_key'
+              AND is_active = true
+              AND revoked_at IS NULL
+              AND certificate_data -> 'allowedVehicles' @> to_jsonb(array[$1::int])
+        `;
+
+    const result = await this.db.query(query, [vehicleId]);
+    return result.rows.map((row: any) => this.mapRowToCertificate(row));
+  }
+
   private mapRowToCertificate(row: any): Certificate {
     // Parse subject_info JSONB field
     let subjectId: number;

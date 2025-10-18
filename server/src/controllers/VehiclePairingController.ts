@@ -1,15 +1,16 @@
 import { Response } from "express";
 import { VehicleAuthRequest } from "../middleware/vehicleAuth";
 import PairingService from "../services/PairingService";
-import KeyService from "../services/KeyService";
+import CertificateModel from "../models/Certificate";
+import { DigitalKeyCertificate } from "../types";
 
 class VehiclePairingController {
   private pairingService: PairingService;
-  private keyService: KeyService;
+  private certificateModel: CertificateModel;
 
   constructor() {
     this.pairingService = new PairingService();
-    this.keyService = new KeyService();
+    this.certificateModel = new CertificateModel();
   }
 
   requestPin = async (
@@ -92,34 +93,43 @@ class VehiclePairingController {
         return;
       }
 
-      const keys = await this.keyService.getVehicleKeys(vehicleId);
-      const now = Date.now();
-      const activeKeys = keys.filter((key) => {
-        if (!key.is_active) {
-          return false;
-        }
-        if (key.expires_at && new Date(key.expires_at).getTime() <= now) {
-          return false;
-        }
-        return true;
-      });
+      const certificates =
+        await this.certificateModel.findActiveDigitalKeysForVehicle(vehicleId);
 
-      const serialized = activeKeys.map((key) => ({
-        id: key.id,
-        keyId: key.id != null ? String(key.id) : undefined,
-        userId: key.user_id,
-        permissions: key.permissions,
-        expiresAt: key.expires_at,
-        createdAt: key.created_at,
-        updatedAt: key.updated_at,
-        keyData: (() => {
-          try {
-            return JSON.parse(key.key_data);
-          } catch {
+      const serialized = certificates
+        .map((certificate) => {
+          const data = certificate
+            .certificateData as DigitalKeyCertificate | undefined;
+          if (!data) {
             return null;
           }
-        })(),
-      }));
+
+          const keyId =
+            data.subject?.keyId ??
+            (data as any).keyId ??
+            certificate.serialNumber;
+
+          const permissions =
+            data.permissions ??
+            {
+              unlock: false,
+              lock: false,
+              startEngine: false,
+            };
+
+          return {
+            certificateId: certificate.serialNumber,
+            keyId,
+            userId: data.subject?.userId ?? certificate.subjectId,
+            permissions,
+            allowedVehicles: data.allowedVehicles,
+            publicKey: data.publicKey ?? certificate.publicKey,
+            validFrom: data.validFrom ?? certificate.issuedAt,
+            validTo: data.validTo ?? certificate.expiresAt,
+            certificate: data,
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
 
       res.status(200).json({
         vehicleId,
