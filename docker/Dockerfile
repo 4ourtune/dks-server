@@ -17,7 +17,7 @@ RUN npm install
 COPY server/ .
 
 # Copy database schema files
-COPY database/ ./database/
+COPY database/ /database/
 
 # Create logs directory
 RUN mkdir -p logs
