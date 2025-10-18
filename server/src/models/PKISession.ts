@@ -1,5 +1,5 @@
-import Database from '../database/connection';
-import { PKISessionRecord } from '../types';
+import Database from "../database/connection";
+import { PKISessionRecord } from "../types";
 
 class PKISessionModel {
   private db: Database;
@@ -54,7 +54,10 @@ class PKISessionModel {
     return row as PKISessionRecord;
   }
 
-  async findActiveByVehicle(vehicleId: number, referenceDate: Date = new Date()): Promise<PKISessionRecord | null> {
+  async findActiveByVehicle(
+    vehicleId: number,
+    referenceDate: Date = new Date(),
+  ): Promise<PKISessionRecord | null> {
     const row = await this.db.get(
       `SELECT * FROM pki_sessions
        WHERE vehicle_id = $1 AND expires_at > $2

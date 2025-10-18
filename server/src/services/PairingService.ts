@@ -1,10 +1,10 @@
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'crypto';
-import PairingSessionModel from '../models/PairingSession';
-import VehicleService from './VehicleService';
-import KeyService from './KeyService';
-import LoggerService from './LoggerService';
-import PKISessionModel from '../models/PKISession';
-import { PairingSessionStatus, PKISessionRecord } from '../types';
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "crypto";
+import PairingSessionModel from "../models/PairingSession";
+import VehicleService from "./VehicleService";
+import KeyService from "./KeyService";
+import LoggerService from "./LoggerService";
+import PKISessionModel from "../models/PKISession";
+import { PairingSessionStatus, PKISessionRecord } from "../types";
 
 interface StartPinSessionResult {
   sessionId: string;
@@ -15,8 +15,12 @@ interface StartPinSessionResult {
 
 interface ConfirmPinResult {
   vehicleId: number;
-  keyId: number | null;
   pairingToken: string;
+}
+
+interface FinalizePairingResult {
+  vehicleId: number;
+  keyId: number | null;
 }
 
 interface VehicleSessionStatus {
@@ -33,7 +37,7 @@ class PairingService {
   private static readonly PIN_LENGTH = 6;
   private static readonly DEFAULT_ATTEMPTS = 5;
   private static readonly PIN_TTL_MS = 10 * 60 * 1000;
-  private static readonly PIN_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  private static readonly PIN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   private static readonly PKI_SESSION_TTL_MS = 15 * 60 * 1000;
 
   private pairingModel: PairingSessionModel;
@@ -50,26 +54,41 @@ class PairingService {
     this.pkiSessionModel = new PKISessionModel();
   }
 
-  async requestPinFromVehicle(deviceId: string, ownerCandidateUserId?: number): Promise<StartPinSessionResult> {
+  async requestPinFromVehicle(
+    deviceId: string,
+    ownerCandidateUserId?: number,
+  ): Promise<StartPinSessionResult> {
     const vehicle = await this.vehicleService.getVehicleByDeviceId(deviceId);
     if (!vehicle?.id) {
-      throw this.buildError('Vehicle not found for device ID', 'VEHICLE_NOT_FOUND');
+      throw this.buildError(
+        "Vehicle not found for device ID",
+        "VEHICLE_NOT_FOUND",
+      );
     }
 
     if (vehicle.owner_id && vehicle.owner_id !== ownerCandidateUserId) {
-      throw this.buildError('Vehicle already registered to another user', 'VEHICLE_ALREADY_REGISTERED');
+      throw this.buildError(
+        "Vehicle already registered to another user",
+        "VEHICLE_ALREADY_REGISTERED",
+      );
     }
 
-    const existingPending = await this.pairingModel.findPendingByVehicle(vehicle.id);
-    await Promise.all(existingPending.map((session) =>
-      this.pairingModel.update(session.id!, { status: 'cancelled' })
-    ));
+    const existingPending = await this.pairingModel.findPendingByVehicle(
+      vehicle.id,
+    );
+    await Promise.all(
+      existingPending.map((session) =>
+        this.pairingModel.update(session.id!, { status: "cancelled" }),
+      ),
+    );
 
     const sessionId = randomUUID();
     const pin = this.generatePin();
     const salt = randomBytes(16);
     const pinHash = this.hashPin(pin, salt);
-    const expiresAt = new Date(Date.now() + PairingService.PIN_TTL_MS).toISOString();
+    const expiresAt = new Date(
+      Date.now() + PairingService.PIN_TTL_MS,
+    ).toISOString();
 
     await this.pairingModel.create({
       session_id: sessionId,
@@ -77,12 +96,12 @@ class PairingService {
       pin_salt: salt,
       pin_hash: pinHash,
       attempts_remaining: PairingService.DEFAULT_ATTEMPTS,
-      status: 'pending',
+      status: "pending",
       expires_at: expiresAt,
       owner_candidate_user_id: ownerCandidateUserId ?? null,
     });
 
-    this.logger.info('Vehicle requested pairing PIN', {
+    this.logger.info("Vehicle requested pairing PIN", {
       vehicleId: vehicle.id,
       deviceId,
       sessionId,
@@ -112,34 +131,53 @@ class PairingService {
   }> {
     const vehicle = await this.vehicleService.getVehicleById(vehicleId);
     if (!vehicle?.id) {
-      throw this.buildError('Vehicle not found', 'VEHICLE_NOT_FOUND');
+      throw this.buildError("Vehicle not found", "VEHICLE_NOT_FOUND");
     }
 
-    const hasAccess = await this.vehicleService.hasVehicleAccess(userId, vehicleId);
+    const hasAccess = await this.vehicleService.hasVehicleAccess(
+      userId,
+      vehicleId,
+    );
     if (!hasAccess) {
-      throw this.buildError('User does not have access to this vehicle', 'ACCESS_DENIED');
+      throw this.buildError(
+        "User does not have access to this vehicle",
+        "ACCESS_DENIED",
+      );
     }
 
-    const verifiedSession = await this.pairingModel.findLatestVerifiedByVehicle(vehicleId);
+    const verifiedSession =
+      await this.pairingModel.findLatestVerifiedByVehicle(vehicleId);
     if (!verifiedSession) {
-      throw this.buildError('Vehicle pairing has not been completed', 'PAIRING_NOT_VERIFIED');
+      throw this.buildError(
+        "Vehicle pairing has not been completed",
+        "PAIRING_NOT_VERIFIED",
+      );
     }
 
     const expectedToken = verifiedSession.pairing_token ?? null;
-    if (expectedToken && options.pairingToken && expectedToken !== options.pairingToken) {
-      throw this.buildError('Pairing token mismatch', 'PAIRING_TOKEN_MISMATCH');
+    if (
+      expectedToken &&
+      options.pairingToken &&
+      expectedToken !== options.pairingToken
+    ) {
+      throw this.buildError("Pairing token mismatch", "PAIRING_TOKEN_MISMATCH");
     }
 
     const existing = await this.pkiSessionModel.findActiveByVehicle(vehicleId);
-    if (existing && (!options.sessionId || existing.session_id === options.sessionId)) {
+    if (
+      existing &&
+      (!options.sessionId || existing.session_id === options.sessionId)
+    ) {
       return this.mapPKISessionRecord(existing, expectedToken);
     }
 
     const sessionId = randomUUID();
-    const sessionKey = randomBytes(32).toString('base64');
-    const clientNonce = randomBytes(16).toString('base64');
-    const serverNonce = randomBytes(16).toString('base64');
-    const expiresAt = new Date(Date.now() + PairingService.PKI_SESSION_TTL_MS).toISOString();
+    const sessionKey = randomBytes(32).toString("base64");
+    const clientNonce = randomBytes(16).toString("base64");
+    const serverNonce = randomBytes(16).toString("base64");
+    const expiresAt = new Date(
+      Date.now() + PairingService.PKI_SESSION_TTL_MS,
+    ).toISOString();
 
     const record = await this.pkiSessionModel.upsert({
       vehicle_id: vehicleId,
@@ -152,7 +190,7 @@ class PairingService {
       expires_at: expiresAt,
     });
 
-    this.logger.info('PKI session refreshed', {
+    this.logger.info("PKI session refreshed", {
       vehicleId,
       sessionId,
       userId,
@@ -161,28 +199,40 @@ class PairingService {
     return this.mapPKISessionRecord(record, expectedToken);
   }
 
-  private mapPKISessionRecord(record: PKISessionRecord, pairingToken: string | null) {
+  private mapPKISessionRecord(
+    record: PKISessionRecord,
+    pairingToken: string | null,
+  ) {
     return {
       vehicleId: record.vehicle_id,
       sessionId: record.session_id,
       sessionKey: record.session_key,
       expiresAt: record.expires_at,
-      serverNonce: record.server_nonce ?? '',
-      clientNonce: record.client_nonce ?? '',
+      serverNonce: record.server_nonce ?? "",
+      clientNonce: record.client_nonce ?? "",
       pairingToken,
       vehiclePublicKey: null,
     };
   }
 
-  async getSessionStatusForVehicle(sessionId: string, deviceId: string): Promise<VehicleSessionStatus> {
+  async getSessionStatusForVehicle(
+    sessionId: string,
+    deviceId: string,
+  ): Promise<VehicleSessionStatus> {
     const vehicle = await this.vehicleService.getVehicleByDeviceId(deviceId);
     if (!vehicle?.id) {
-      throw this.buildError('Vehicle not found for device ID', 'VEHICLE_NOT_FOUND');
+      throw this.buildError(
+        "Vehicle not found for device ID",
+        "VEHICLE_NOT_FOUND",
+      );
     }
 
-    const session = await this.pairingModel.findBySessionAndVehicle(sessionId, vehicle.id);
+    const session = await this.pairingModel.findBySessionAndVehicle(
+      sessionId,
+      vehicle.id,
+    );
     if (!session) {
-      throw this.buildError('Pairing session not found', 'SESSION_NOT_FOUND');
+      throw this.buildError("Pairing session not found", "SESSION_NOT_FOUND");
     }
 
     return {
@@ -196,24 +246,39 @@ class PairingService {
     };
   }
 
-  async confirmPinSession(userId: number, vehicleId: number, pin: string): Promise<ConfirmPinResult> {
+  async confirmPinSession(
+    userId: number,
+    vehicleId: number,
+    pin: string,
+  ): Promise<ConfirmPinResult> {
     const vehicle = await this.vehicleService.getVehicleById(vehicleId);
     if (!vehicle?.id) {
-      throw this.buildError('Vehicle not found', 'VEHICLE_NOT_FOUND');
+      throw this.buildError("Vehicle not found", "VEHICLE_NOT_FOUND");
     }
 
     if (vehicle.owner_id && vehicle.owner_id !== userId) {
-      throw this.buildError('Vehicle already registered to another user', 'VEHICLE_ALREADY_REGISTERED');
+      throw this.buildError(
+        "Vehicle already registered to another user",
+        "VEHICLE_ALREADY_REGISTERED",
+      );
     }
 
-    const pendingSessions = await this.pairingModel.findPendingByVehicle(vehicle.id);
+    const pendingSessions = await this.pairingModel.findPendingByVehicle(
+      vehicle.id,
+    );
     if (!pendingSessions.length) {
-      throw this.buildError('No pending pairing sessions for this vehicle', 'NO_PENDING_SESSION');
+      throw this.buildError(
+        "No pending pairing sessions for this vehicle",
+        "NO_PENDING_SESSION",
+      );
     }
 
     let matchedSession = null;
     for (const candidate of pendingSessions) {
-      if (candidate.owner_candidate_user_id && candidate.owner_candidate_user_id !== userId) {
+      if (
+        candidate.owner_candidate_user_id &&
+        candidate.owner_candidate_user_id !== userId
+      ) {
         continue;
       }
       const candidateHash = this.hashPin(pin, candidate.pin_salt);
@@ -224,8 +289,14 @@ class PairingService {
     }
 
     const session = matchedSession ?? pendingSessions[0];
-    if (session.owner_candidate_user_id && session.owner_candidate_user_id !== userId) {
-      throw this.buildError('Pairing session reserved for a different user', 'SESSION_OWNERSHIP_ERROR');
+    if (
+      session.owner_candidate_user_id &&
+      session.owner_candidate_user_id !== userId
+    ) {
+      throw this.buildError(
+        "Pairing session reserved for a different user",
+        "SESSION_OWNERSHIP_ERROR",
+      );
     }
 
     const providedHash = this.hashPin(pin, session.pin_salt);
@@ -233,14 +304,15 @@ class PairingService {
 
     if (!pinMatches) {
       const remaining = session.attempts_remaining - 1;
-      const status: PairingSessionStatus = remaining <= 0 ? 'expired' : 'pending';
+      const status: PairingSessionStatus =
+        remaining <= 0 ? "expired" : "pending";
       await this.pairingModel.update(session.id!, {
         attempts_remaining: Math.max(remaining, 0),
         status,
         last_attempt_at: new Date().toISOString(),
       });
 
-      const error = this.buildError('Invalid PIN', 'PIN_INVALID');
+      const error = this.buildError("Invalid PIN", "PIN_INVALID");
       (error as any).remainingAttempts = Math.max(remaining, 0);
       throw error;
     }
@@ -248,36 +320,13 @@ class PairingService {
     const pairingToken = randomUUID();
 
     await this.pairingModel.update(session.id!, {
-      status: 'verified',
+      status: "verified",
       user_id: userId,
       pairing_token: pairingToken,
       last_attempt_at: new Date().toISOString(),
     });
 
-    if (!vehicle.owner_id) {
-      await this.vehicleService.updateVehicle(vehicle.id, { owner_id: userId });
-    }
-
-    let digitalKeyId: number | null = null;
-    try {
-      const key = await this.keyService.createDigitalKey(userId, vehicle.id, {
-        unlock: true,
-        lock: true,
-        startEngine: false,
-      });
-      digitalKeyId = key.id ?? null;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '';
-      if (message.includes('Active key already exists')) {
-        const existingKeys = await this.keyService.getUserKeys(userId);
-        const key = existingKeys.find((k) => k.vehicle_id === vehicle.id && k.is_active);
-        digitalKeyId = key?.id ?? null;
-      } else {
-        throw error;
-      }
-    }
-
-    this.logger.info('Pairing PIN confirmed', {
+    this.logger.info("Pairing PIN confirmed", {
       vehicleId: vehicle.id,
       userId,
       pairingToken,
@@ -285,8 +334,99 @@ class PairingService {
 
     return {
       vehicleId: vehicle.id,
-      keyId: digitalKeyId,
       pairingToken,
+    };
+  }
+
+  async finalizePairingSession(
+    userId: number,
+    vehicleId: number,
+    pairingToken: string,
+  ): Promise<FinalizePairingResult> {
+    if (!pairingToken || typeof pairingToken !== "string") {
+      throw this.buildError(
+        "Pairing token is required",
+        "PAIRING_TOKEN_REQUIRED",
+      );
+    }
+
+    const vehicle = await this.vehicleService.getVehicleById(vehicleId);
+    if (!vehicle?.id) {
+      throw this.buildError("Vehicle not found", "VEHICLE_NOT_FOUND");
+    }
+
+    const session = await this.pairingModel.findByVehicleAndToken(
+      vehicleId,
+      pairingToken,
+    );
+    if (!session) {
+      throw this.buildError("Pairing token mismatch", "PAIRING_TOKEN_MISMATCH");
+    }
+
+    if (session.user_id && session.user_id !== userId) {
+      throw this.buildError(
+        "Pairing session reserved for a different user",
+        "SESSION_OWNERSHIP_ERROR",
+      );
+    }
+
+    if (session.status !== "verified" && session.status !== "completed") {
+      throw this.buildError(
+        "Pairing has not been verified yet",
+        "PAIRING_NOT_VERIFIED",
+      );
+    }
+
+    const currentOwner = vehicle.owner_id;
+    if (currentOwner && currentOwner !== userId) {
+      throw this.buildError(
+        "Vehicle is already registered to another user",
+        "VEHICLE_ALREADY_REGISTERED",
+      );
+    }
+
+    if (!currentOwner) {
+      await this.vehicleService.updateVehicle(vehicleId, { owner_id: userId });
+    }
+
+    let digitalKeyId: number | null = null;
+    try {
+      const key = await this.keyService.createDigitalKey(userId, vehicleId, {
+        unlock: true,
+        lock: true,
+        startEngine: true,
+      });
+      digitalKeyId = key.id ?? null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.includes("Active key already exists")) {
+        const existingKeys = await this.keyService.getUserKeys(userId);
+        const key = existingKeys.find(
+          (k) => k.vehicle_id === vehicleId && k.is_active,
+        );
+        digitalKeyId = key?.id ?? null;
+      } else {
+        throw error;
+      }
+    }
+
+    await this.pairingModel.update(session.id!, {
+      status: "completed",
+      pairing_token: pairingToken,
+      user_id: userId,
+      last_attempt_at: new Date().toISOString(),
+    });
+
+    this.logger.info("Pairing session finalized", {
+      vehicleId,
+      userId,
+      pairingToken,
+      keyId: digitalKeyId,
+    });
+
+    return {
+      vehicleId,
+      keyId: digitalKeyId,
     };
   }
 
@@ -297,7 +437,8 @@ class PairingService {
     attemptsRemaining: number;
     ownerCandidateUserId: number | null;
   } | null> {
-    const pendingSessions = await this.pairingModel.findPendingByVehicle(vehicleId);
+    const pendingSessions =
+      await this.pairingModel.findPendingByVehicle(vehicleId);
     if (!pendingSessions.length) {
       return null;
     }
@@ -315,7 +456,7 @@ class PairingService {
   private generatePin(): string {
     const chars = PairingService.PIN_ALPHABET;
     const random = randomBytes(PairingService.PIN_LENGTH);
-    let pin = '';
+    let pin = "";
     for (let i = 0; i < PairingService.PIN_LENGTH; i += 1) {
       const index = random[i] % chars.length;
       pin += chars[index];

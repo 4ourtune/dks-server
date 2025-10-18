@@ -48,7 +48,7 @@ CREATE TABLE pairing_sessions (
     owner_candidate_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     pairing_token VARCHAR(128),
     attempts_remaining INTEGER NOT NULL DEFAULT 5,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'expired', 'cancelled')),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'completed', 'expired', 'cancelled')),
     expires_at TIMESTAMP NOT NULL,
     last_attempt_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

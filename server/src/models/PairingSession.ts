@@ -1,5 +1,5 @@
-import Database from '../database/connection';
-import { PairingSession, PairingSessionStatus } from '../types';
+import Database from "../database/connection";
+import { PairingSession, PairingSessionStatus } from "../types";
 
 class PairingSessionModel {
   private db: Database;
@@ -47,8 +47,8 @@ class PairingSessionModel {
         session.attempts_remaining,
         session.status,
         session.expires_at,
-        session.last_attempt_at ?? null
-      ]
+        session.last_attempt_at ?? null,
+      ],
     );
 
     return row as PairingSession;
@@ -56,16 +56,16 @@ class PairingSessionModel {
 
   async findBySessionId(sessionId: string): Promise<PairingSession | null> {
     const row = await this.db.get(
-      'SELECT * FROM pairing_sessions WHERE session_id = $1',
-      [sessionId]
+      "SELECT * FROM pairing_sessions WHERE session_id = $1",
+      [sessionId],
     );
     return (row as PairingSession) || null;
   }
 
   async findById(id: number): Promise<PairingSession | null> {
     const row = await this.db.get(
-      'SELECT * FROM pairing_sessions WHERE id = $1',
-      [id]
+      "SELECT * FROM pairing_sessions WHERE id = $1",
+      [id],
     );
     return (row as PairingSession) || null;
   }
@@ -75,33 +75,66 @@ class PairingSessionModel {
       `SELECT * FROM pairing_sessions
        WHERE vehicle_id = $1 AND status = 'pending'
        ORDER BY created_at DESC`,
-      [vehicleId]
+      [vehicleId],
     );
     return rows as PairingSession[];
   }
 
-  async findLatestVerifiedByVehicle(vehicleId: number): Promise<PairingSession | null> {
+  async findLatestVerifiedByVehicle(
+    vehicleId: number,
+  ): Promise<PairingSession | null> {
     const row = await this.db.get(
       `SELECT * FROM pairing_sessions
-       WHERE vehicle_id = $1 AND status = 'verified'
+       WHERE vehicle_id = $1 AND status IN ('verified', 'completed')
        ORDER BY updated_at DESC, created_at DESC
        LIMIT 1`,
-      [vehicleId]
+      [vehicleId],
     );
     return (row as PairingSession) || null;
   }
 
-  async findBySessionAndVehicle(sessionId: string, vehicleId: number): Promise<PairingSession | null> {
+  async findBySessionAndVehicle(
+    sessionId: string,
+    vehicleId: number,
+  ): Promise<PairingSession | null> {
     const row = await this.db.get(
-      'SELECT * FROM pairing_sessions WHERE session_id = $1 AND vehicle_id = $2',
-      [sessionId, vehicleId]
+      "SELECT * FROM pairing_sessions WHERE session_id = $1 AND vehicle_id = $2",
+      [sessionId, vehicleId],
     );
     return (row as PairingSession) || null;
   }
 
-  async update(id: number, updates: Partial<Pick<PairingSession,
-    'attempts_remaining' | 'status' | 'pin_hash' | 'pin_salt' | 'expires_at' | 'last_attempt_at' | 'user_id' | 'owner_candidate_user_id' | 'pairing_token'
-  >>): Promise<PairingSession | null> {
+  async findByVehicleAndToken(
+    vehicleId: number,
+    pairingToken: string,
+  ): Promise<PairingSession | null> {
+    const row = await this.db.get(
+      `SELECT * FROM pairing_sessions
+       WHERE vehicle_id = $1 AND pairing_token = $2
+       ORDER BY updated_at DESC, created_at DESC
+       LIMIT 1`,
+      [vehicleId, pairingToken],
+    );
+    return (row as PairingSession) || null;
+  }
+
+  async update(
+    id: number,
+    updates: Partial<
+      Pick<
+        PairingSession,
+        | "attempts_remaining"
+        | "status"
+        | "pin_hash"
+        | "pin_salt"
+        | "expires_at"
+        | "last_attempt_at"
+        | "user_id"
+        | "owner_candidate_user_id"
+        | "pairing_token"
+      >
+    >,
+  ): Promise<PairingSession | null> {
     const fields: string[] = [];
     const values: any[] = [];
 
@@ -154,12 +187,12 @@ class PairingSessionModel {
       return this.findById(id);
     }
 
-    fields.push('updated_at = CURRENT_TIMESTAMP');
+    fields.push("updated_at = CURRENT_TIMESTAMP");
     values.push(id);
 
     await this.db.run(
-      `UPDATE pairing_sessions SET ${fields.join(', ')} WHERE id = $${values.length}`,
-      values
+      `UPDATE pairing_sessions SET ${fields.join(", ")} WHERE id = $${values.length}`,
+      values,
     );
 
     return this.findById(id);
